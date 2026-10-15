@@ -1,0 +1,12 @@
+.venv
+runtime/.venv
+runtime/.state
+lab
+data
+RE1-OB
+results
+.tools
+tmp
+**/__pycache__
+.pytest_cache
+*.pdf

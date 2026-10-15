@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: corca-api
+  namespace: corca
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: corca-api}
+  template:
+    metadata:
+      labels: {app: corca-api}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}
+      containers:
+        - name: api
+          image: corca:0.1.0
+          imagePullPolicy: Never
+          env:
+            - {name: CORCA_TOKEN_FILE, value: /run/secrets/corca/api-token}
+            - {name: CORCA_CALIBRATION, value: /etc/corca/calibration.json}
+            - {name: MPLCONFIGDIR, value: /tmp/matplotlib}
+          ports: [{containerPort: 8000}]
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests: {cpu: 200m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1536Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: token, mountPath: /run/secrets/corca, readOnly: true}
+            - {name: calibration, mountPath: /etc/corca, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: token
+          secret: {secretName: corca-api, defaultMode: 0440}
+        - name: calibration
+          configMap: {name: corca-calibration}
+        - name: tmp
+          emptyDir: {sizeLimit: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: corca-api
+  namespace: corca
+spec:
+  selector: {app: corca-api}
+  ports: [{port: 8000, targetPort: 8000}]

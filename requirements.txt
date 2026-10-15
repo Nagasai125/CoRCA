@@ -1,0 +1,2 @@
+# Installs this package plus test tooling. Runtime deps live in pyproject.toml.
+-e .[dev]

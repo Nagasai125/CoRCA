@@ -1,0 +1,123 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: corca
+resources:
+  - namespace.yaml
+  - vendor/online-boutique.yaml
+  - observability.yaml
+  - chaos-discovery.yaml
+images:
+  - name: redis
+    newName: redis
+    digest: sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+patches:
+  - target:
+      kind: Deployment
+      name: (adservice|cartservice|checkoutservice|currencyservice|emailservice|frontend|paymentservice|productcatalogservice|recommendationservice|shippingservice)
+    patch: |-
+      - op: copy
+        from: /spec/template/spec/containers/0/readinessProbe
+        path: /spec/template/spec/containers/0/startupProbe
+      - op: add
+        path: /spec/template/spec/containers/0/startupProbe/failureThreshold
+        value: 30
+      - op: add
+        path: /spec/template/spec/containers/0/startupProbe/periodSeconds
+        value: 5
+      - op: add
+        path: /spec/template/spec/containers/0/startupProbe/timeoutSeconds
+        value: 3
+      - op: add
+        path: /spec/template/spec/containers/0/readinessProbe/timeoutSeconds
+        value: 3
+      - op: add
+        path: /spec/template/spec/containers/0/livenessProbe/timeoutSeconds
+        value: 3
+      - op: add
+        path: /spec/template/spec/containers/0/livenessProbe/failureThreshold
+        value: 6
+  - target:
+      kind: Deployment
+      name: cartservice
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cartservice
+      spec:
+        template:
+          spec:
+            containers:
+              - name: server
+                resources:
+                  requests:
+                    cpu: 200m
+                    memory: 128Mi
+                  limits:
+                    cpu: "1"
+                    memory: 256Mi
+                env:
+                  - name: DOTNET_PROCESSOR_COUNT
+                    value: "2"
+                readinessProbe:
+                  timeoutSeconds: 3
+                livenessProbe:
+                  timeoutSeconds: 3
+                  failureThreshold: 6
+  - target:
+      kind: Deployment
+      name: (frontend|checkoutservice|currencyservice|productcatalogservice|shippingservice|paymentservice|emailservice|recommendationservice)
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: instrumented-service
+      spec:
+        template:
+          spec:
+            containers:
+              - name: server
+                env:
+                  - name: ENABLE_TRACING
+                    value: "1"
+                  - name: COLLECTOR_SERVICE_ADDR
+                    value: "otel-collector:4317"
+                  - name: OTEL_SERVICE_NAME
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: metadata.labels['app']
+  - target:
+      kind: Deployment
+      name: currencyservice
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: currencyservice
+      spec:
+        template:
+          spec:
+            containers:
+              - name: server
+                resources:
+                  requests:
+                    memory: 128Mi
+                  limits:
+                    memory: 256Mi
+                env:
+                  - name: NODE_OPTIONS
+                    value: "--max-old-space-size=64"
+  - target:
+      kind: Service
+      name: frontend-external
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: ClusterIP
+  - target:
+      kind: Deployment
+      name: loadgenerator
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/env/1/value
+        value: "5"

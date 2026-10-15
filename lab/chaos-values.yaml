@@ -1,0 +1,22 @@
+clusterScoped: false
+enableProfiling: false
+controllerManager:
+  replicaCount: 1
+  targetNamespace: corca
+  enableFilterNamespace: true
+  leaderElection:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+chaosDaemon:
+  runtime: containerd
+  socketPath: /run/containerd/containerd.sock
+dashboard:
+  create: false
+dnsServer:
+  create: false

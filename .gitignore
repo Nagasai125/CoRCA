@@ -1,0 +1,17 @@
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+build/
+dist/
+*.egg-info/
+results/
+RE1-OB/
+RE2-*/
+data/
+.DS_Store
+.tools/
+lab/.state/
+lab/vendor/
+tmp/
+runtime/.state/
