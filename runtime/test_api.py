@@ -21,6 +21,8 @@ def payload():
 def test_authentication_and_health():
     with TestClient(create_app(TOKEN)) as client:
         assert client.get("/healthz").status_code == 200
+        home = client.get("/")
+        assert home.status_code == 200 and "find every root cause" in home.text
         assert client.post("/diagnose", json=payload()).status_code == 401
         assert client.get("/readyz").status_code == 503  # not ready without calibration
         assert client.get("/openapi.json").status_code == 401

@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import requests
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -330,6 +331,12 @@ def create_app(token, thresholds=None, timeout=20, concurrency=2, source=None, d
             raise HTTPException(503, "no Prometheus source configured (--source / CORCA_SOURCE)")
         if method not in thresholds:
             raise HTTPException(422, f"no calibrated tau for {method}; deploy with a calibration file")
+
+    landing = (Path(__file__).parent / "web" / "index.html").read_text()
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    def home():
+        return landing
 
     @app.get("/healthz")
     def health():

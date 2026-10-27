@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CoRCA</title>
+<meta name="description" content="CoRCA finds every root cause when several microservices fail at the same time.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f8fb; --surface: #ffffff; --ink: #14213d; --ink-2: #4a5468; --line: #d9dfe8;
+    --fault: #d93a3f; --fault-tint: #fbe3e3; --root: #2a78d6; --root-tint: #dbe9fa;
+    --quiet: #eef1f5; --quiet-ink: #8a94a6;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --code-bg: #14213d; --code-ink: #e8edf5;
+    --radius: 10px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1626; --surface: #172036; --ink: #edf1f7; --ink-2: #a9b3c4; --line: #2c3850;
+      --fault: #f0646a; --fault-tint: #4a2028; --root: #5598e7; --root-tint: #1f3658;
+      --quiet: #1d2740; --quiet-ink: #6f7b91;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --code-bg: #0a101d; --code-ink: #dbe3ef;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.6 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--root); }
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible, summary:focus-visible {
+    outline: 3px solid var(--root); outline-offset: 3px; border-radius: 4px;
+  }
+  code, pre { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: .86em; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  /* top bar */
+  header.top { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 5; }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 16px; }
+  .brand { font-weight: 600; font-size: 18px; color: var(--ink); text-decoration: none; display: flex; gap: 10px; align-items: center; }
+  .brand svg { width: 22px; height: 22px; }
+  nav { display: flex; gap: 4px; }
+  nav a { color: var(--ink-2); text-decoration: none; font-size: 15px; padding: 10px 12px; border-radius: 8px; min-height: 44px; display: inline-flex; align-items: center; }
+  nav a:hover { color: var(--ink); background: var(--quiet); }
+
+  /* hero */
+  .hero { padding: 64px 0 72px; }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; align-items: center; }
+  h1 { font-size: clamp(36px, 5vw, 56px); line-height: 1.08; letter-spacing: -.02em; font-weight: 600; margin: 0 0 20px; }
+  .lede { font-size: 19px; color: var(--ink-2); max-width: 34em; margin: 0 0 32px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 22px;
+    border-radius: 999px; font: inherit; font-size: 16px; font-weight: 500; text-decoration: none; cursor: pointer;
+    border: 1px solid transparent; transition: background-color .15s, border-color .15s;
+  }
+  .btn.primary { background: var(--ink); color: var(--bg); }
+  .btn.primary:hover { background: var(--root); }
+  .btn.secondary { border-color: var(--line); color: var(--ink); background: transparent; }
+  .btn.secondary:hover { border-color: var(--ink-2); }
+
+  .stage { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 20px 16px; }
+  .stage svg.graph { width: 100%; height: auto; display: block; }
+  .edge { stroke: var(--line); stroke-width: 1.5; transition: stroke .5s; }
+  .edge.hot { stroke: var(--fault); stroke-width: 2; }
+  .node circle { fill: var(--surface); stroke: var(--line); stroke-width: 2; transition: fill .5s, stroke .5s; }
+  .node text { fill: var(--ink-2); font-size: 13px; text-anchor: middle; transition: fill .5s; }
+  .node .badge { opacity: 0; transition: opacity .4s; }
+  .node .badge rect { fill: var(--root); }
+  .node .badge text { fill: #fff; font-size: 11px; font-weight: 600; }
+  .node[data-state="anomalous"] circle { fill: var(--fault); stroke: var(--fault); animation: pulse 1.4s ease-in-out infinite; }
+  .node[data-state="symptom"] circle { fill: var(--fault-tint); stroke: var(--fault); }
+  .node[data-state="root"] circle { fill: var(--root); stroke: var(--root); }
+  .node[data-state="root"] text.name { fill: var(--ink); font-weight: 600; }
+  .node[data-state="root"] .badge { opacity: 1; }
+  .node[data-state="explained"] circle { fill: var(--quiet); stroke: var(--quiet-ink); stroke-dasharray: 4 3; }
+  @keyframes pulse { 50% { stroke-width: 8; stroke-opacity: .35; } }
+
+  .caption { min-height: 3.2em; margin: 12px 4px 4px; color: var(--ink); font-size: 15px; }
+  .stage-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+  .key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); }
+  .key span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 2px solid; }
+  .key .k-fault::before { background: var(--fault); border-color: var(--fault); }
+  .key .k-sym::before { background: var(--fault-tint); border-color: var(--fault); }
+  .key .k-root::before { background: var(--root); border-color: var(--root); }
+  .key .k-exp::before { background: var(--quiet); border-color: var(--quiet-ink); border-style: dashed; }
+  .replay { font: inherit; font-size: 14px; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 999px; min-height: 36px; padding: 0 14px; cursor: pointer; white-space: nowrap; }
+  .replay:hover { border-color: var(--ink-2); }
+
+  /* sections */
+  section.band { padding: 88px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(28px, 3.4vw, 38px); line-height: 1.15; letter-spacing: -.015em; font-weight: 600; margin: 0 0 16px; }
+  .intro { color: var(--ink-2); max-width: 38em; margin: 0 0 40px; }
+
+  .steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; counter-reset: s; }
+  .steps li { counter-increment: s; border-top: 2px solid var(--line); padding-top: 18px; transition: border-color .4s; }
+  .steps li::before { content: counter(s); display: block; font-size: 15px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; transition: color .4s; }
+  .steps li.on { border-color: var(--root); }
+  .steps li.on::before { color: var(--root); }
+  .steps h3 { font-size: 18px; margin: 0 0 6px; font-weight: 600; }
+  .steps p { margin: 0; color: var(--ink-2); font-size: 15px; }
+
+  .results { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 56px; align-items: start; }
+  .figures { display: grid; gap: 20px; margin: 8px 0 0; }
+  .figures div { border-left: 3px solid var(--line); padding-left: 16px; }
+  .figures strong { display: block; font-size: 32px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .figures span { color: var(--ink-2); font-size: 15px; }
+  .chart { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; position: relative; }
+  .chart h3 { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
+  .chart .sub { margin: 0 0 12px; color: var(--ink-2); font-size: 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  svg.bars { width: 100%; height: auto; display: block; overflow: visible; }
+  .grid line { stroke: var(--line); }
+  .grid text, .axis text { fill: var(--ink-2); font-size: 12px; }
+  .axis text.group { fill: var(--ink); font-size: 13px; font-weight: 600; }
+  .bar { transform-box: fill-box; transform-origin: 50% 100%; transform: scaleY(0); transition: transform .9s cubic-bezier(.2, .7, .2, 1); cursor: default; }
+  .chart.in .bar { transform: scaleY(1); }
+  .whisker { stroke: var(--ink-2); stroke-width: 2; opacity: 0; transition: opacity .4s .9s; }
+  .chart.in .whisker, .chart.in .vlabel { opacity: 1; }
+  .vlabel { fill: var(--ink); font-size: 12px; font-weight: 600; text-anchor: middle; opacity: 0; transition: opacity .4s 1s; font-variant-numeric: tabular-nums; }
+  .hit { fill: transparent; }
+  .hit:focus { outline: none; }
+  .hit:focus-visible { stroke: var(--root); stroke-width: 2; }
+  .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 13px; line-height: 1.4; padding: 8px 10px; border-radius: 8px; opacity: 0; transform: translate(-50%, -110%); transition: opacity .12s; white-space: nowrap; }
+  .tip.show { opacity: 1; }
+  details.table { margin-top: 12px; font-size: 14px; color: var(--ink-2); }
+  details.table summary { cursor: pointer; min-height: 32px; display: inline-flex; align-items: center; }
+  details.table table { border-collapse: collapse; margin-top: 8px; width: 100%; font-variant-numeric: tabular-nums; }
+  details.table th, details.table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .note { font-size: 14px; color: var(--ink-2); margin-top: 24px; max-width: 38em; }
+
+  .connect { display: grid; gap: 40px; }
+  .connect ol { list-style: none; counter-reset: c; padding: 0; margin: 0; display: grid; gap: 40px; }
+  .connect li { counter-increment: c; display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 56px; align-items: start; }
+  .connect li h3 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+  .connect li h3::before { content: counter(c) ". "; color: var(--ink-2); font-weight: 500; }
+  .connect li p { margin: 0; color: var(--ink-2); font-size: 16px; }
+  pre { margin: 0; background: var(--code-bg); color: var(--code-ink); padding: 18px 20px; border-radius: var(--radius); overflow-x: auto; line-height: 1.55; }
+  pre .c { color: #8c9ab3; }
+
+  footer { border-top: 1px solid var(--line); padding: 40px 0 56px; color: var(--ink-2); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 32px; justify-content: space-between; }
+  footer p { margin: 0; max-width: 44em; }
+
+  @media (max-width: 900px) {
+    .hero .wrap, .results, .connect li { grid-template-columns: 1fr; gap: 32px; }
+    .steps { grid-template-columns: repeat(2, 1fr); }
+    nav a.opt { display: none; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 0 16px; }
+    .node text { font-size: 20px; }          /* SVG scales down ~2x on phones */
+    .node .badge text { font-size: 15px; }
+    .grid text, .axis text { font-size: 20px; }
+    .axis text.group { font-size: 20px; }
+    .vlabel { font-size: 19px; }
+    .hero { padding: 40px 0 56px; }
+    .steps { grid-template-columns: 1fr; gap: 24px; }
+    section.band { padding: 64px 0; }
+    .stage-foot { flex-direction: column; align-items: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="CoRCA home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="5" cy="19" r="3" fill="#2a78d6"/><circle cx="19" cy="19" r="3" fill="#2a78d6"/><path d="M10.5 7.5 6.5 16.5M13.5 7.5l4 9" stroke="currentColor" stroke-width="2"/></svg>
+      CoRCA
+    </a>
+    <nav aria-label="Page sections">
+      <a href="#how" class="opt">How it works</a>
+      <a href="#results" class="opt">Results</a>
+      <a href="#connect">Connect</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <div>
+        <h1 id="hero-title">When several services fail at once, find every root cause.</h1>
+        <p class="lede">CoRCA reads your Prometheus metrics when an alert fires and names the services that actually broke, not just the loudest one. Then it sets aside the symptoms they explain and keeps looking.</p>
+        <div class="actions">
+          <a class="btn primary" href="#connect">Connect your cluster</a>
+          <a class="btn secondary" href="#how">See how it works</a>
+        </div>
+      </div>
+
+      <figure class="stage" aria-labelledby="stage-caption" style="margin:0">
+        <svg class="graph" id="graph" viewBox="0 0 660 414" role="img" aria-label="Online Boutique service graph replaying a two-fault incident"></svg>
+        <p class="caption" id="stage-caption" aria-live="polite"></p>
+        <div class="stage-foot">
+          <div class="key" aria-hidden="true">
+            <span class="k-fault">faulty</span><span class="k-sym">symptom</span><span class="k-root">root cause found</span><span class="k-exp">explained</span>
+          </div>
+          <button class="replay" id="replay" type="button">Replay</button>
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band" id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <h2 id="how-title">Explain away, then look again</h2>
+      <p class="intro">A slow service makes everything that calls it look slow too. Most tools return the single most suspicious service and stop. CoRCA repeats the search on whatever its first answer cannot explain.</p>
+      <ol class="steps" id="steps">
+        <li><h3>Detect anomalies</h3><p>Compare each metric after the alert with the minutes before it.</p></li>
+        <li><h3>Rank the strongest root</h3><p>A proven ranker, BARO or CIRCA, picks the most likely cause.</p></li>
+        <li><h3>Explain away its callers</h3><p>Symptoms that service can cause upstream are set aside. Callers' own CPU and memory stay in play.</p></li>
+        <li><h3>Repeat until nothing is left</h3><p>Stop when no remaining anomaly clears the calibrated threshold, after at most three rounds.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band" id="results" aria-labelledby="results-title">
+    <div class="wrap results">
+      <div>
+        <h2 id="results-title">More answers without more guessing</h2>
+        <p class="intro" style="margin-bottom:28px">Returning a fixed top two or top three looks safe, but every extra guess is a false lead when only one service broke. CoRCA adds a cause only when the evidence is still there.</p>
+        <div class="figures">
+          <div><strong>0.772</strong><span>F1 with BARO, against 0.587 for a fixed top two</span></div>
+          <div><strong>1.3</strong><span>services named per single-fault incident on average, against 2 or 3 for a fixed top-k</span></div>
+        </div>
+      </div>
+      <figure class="chart" id="chart" style="margin:0">
+        <h3>Single-fault accuracy, 125 incidents</h3>
+        <p class="sub">Set F1 with 95% confidence intervals, RCAEval Online Boutique benchmark</p>
+        <div class="legend" id="legend"></div>
+        <svg class="bars" id="bars" viewBox="0 0 560 300" role="img" aria-label="Bar chart of set F1 by approach"></svg>
+        <div class="tip" id="tip" role="status"></div>
+        <details class="table">
+          <summary>Show as a table</summary>
+          <table id="table"><thead><tr><th>Ranker</th><th>Approach</th><th>F1</th><th>95% CI</th></tr></thead><tbody></tbody></table>
+        </details>
+      </figure>
+    </div>
+    <div class="wrap">
+      <p class="note">These are single-fault results; tau is calibrated on held-out repeats. Evaluation on incidents with two and three concurrent faults is under way, so no multi-fault numbers are claimed here yet.</p>
+    </div>
+  </section>
+
+  <section class="band" id="connect" aria-labelledby="connect-title">
+    <div class="wrap connect">
+      <div>
+        <h2 id="connect-title">Connect it in three steps</h2>
+        <p class="intro" style="margin:0">CoRCA runs as one small service next to Prometheus. It needs read access to your metrics and nothing else.</p>
+      </div>
+      <ol>
+        <li>
+          <div><h3>Deploy the service</h3><p>Ship it with a calibration fitted on a few single-fault drills from your own cluster.</p></div>
+          <pre><code>python -m runtime.deploy \
+  --image corca:0.2.0 \
+  --calibration calibration.json</code></pre>
+        </li>
+        <li>
+          <div><h3>Send it your alerts</h3><p>Add CoRCA as an Alertmanager receiver. Repeated notifications for one alert start one diagnosis.</p></div>
+          <pre><code>receivers:
+  - name: corca
+    webhook_configs:
+      - url: http://corca-api.corca.svc:8000/v1/alerts
+        http_config:
+          authorization:
+            credentials_file: /etc/alertmanager/corca-token</code></pre>
+        </li>
+        <li>
+          <div><h3>Read the diagnosis</h3><p>Results arrive about two minutes after the alert and are kept for later review.</p></div>
+          <pre><code>curl -H "X-API-Key: $TOKEN" \
+  http://corca-api.corca.svc:8000/v1/diagnoses?limit=1
+
+<span class="c"># "status": "done",
+# "result": {
+#   "status": "diagnosed",
+#   "root_causes": ["adservice", "currencyservice"]
+# }</span></code></pre>
+        </li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>CoRCA is a capstone research prototype, tested on the Online Boutique demo application with Chaos Mesh fault injection. Confidence values are anomaly-score ratios, not probabilities.</p>
+    <a href="https://github.com/Nagasai125/CoRCA">Source on GitHub</a>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- explain-away replay: Online Boutique topology (corca/topology.py) ---------- */
+  const nodes = {
+    frontend: [330, 48], checkout: [190, 168], recommendation: [520, 168],
+    ad: [40, 290], currency: [135, 290], payment: [230, 290], email: [325, 290],
+    shipping: [420, 290], catalog: [515, 290], cart: [610, 290], redis: [610, 372],
+  };
+  const edges = [ // caller -> callee
+    ["frontend", "ad"], ["frontend", "cart"], ["frontend", "checkout"], ["frontend", "currency"],
+    ["frontend", "catalog"], ["frontend", "recommendation"], ["frontend", "shipping"],
+    ["checkout", "cart"], ["checkout", "currency"], ["checkout", "email"], ["checkout", "payment"],
+    ["checkout", "catalog"], ["checkout", "shipping"], ["recommendation", "catalog"], ["cart", "redis"],
+  ];
+  // Replayed from the held-out lab incident currencyservice_cpu + adservice_cpu (BARO round order).
+  const timeline = [
+    { step: 0, text: "Healthy traffic across 11 services.", set: {} },
+    { step: 1, text: "Two faults start: CPU saturation in adservice and currencyservice. The services that call them slow down too.",
+      set: { ad: "anomalous", currency: "anomalous", frontend: "symptom", checkout: "symptom" } },
+    { step: 2, text: "Round 1: the ranker picks adservice as the strongest root cause.", set: { ad: "root" }, badge: { ad: "root 1" } },
+    { step: 3, text: "Its caller, frontend, is explained, so those symptoms are set aside.", set: { frontend: "explained" } },
+    { step: 2, text: "Round 2: currencyservice is the strongest anomaly left.", set: { currency: "root" }, badge: { currency: "root 2" } },
+    { step: 3, text: "checkoutservice is explained too.", set: { checkout: "explained" } },
+    { step: 4, text: "Nothing unexplained is left, so CoRCA stops: adservice and currencyservice. A single-answer tool would have stopped at adservice.", set: {} },
+  ];
+
+  const svg = document.getElementById("graph");
+  const ns = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent) => {
+    const e = document.createElementNS(ns, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    parent.appendChild(e);
+    return e;
+  };
+  const edgeEls = edges.map(([a, b]) => {
+    const [x1, y1] = nodes[a], [x2, y2] = nodes[b];
+    return { a, b, line: el("line", { x1, y1, x2, y2, class: "edge" }, svg) };
+  });
+  const nodeEls = {};
+  for (const [name, [x, y]] of Object.entries(nodes)) {
+    const g = el("g", { class: "node", "data-state": "normal" }, svg);
+    el("circle", { cx: x, cy: y, r: 13 }, g);
+    el("text", { x, y: y + 31, class: "name" }, g).textContent = name;
+    const badge = el("g", { class: "badge" }, g);
+    el("rect", { x: x - 25, y: y - 40, width: 50, height: 19, rx: 9.5 }, badge);
+    el("text", { x, y: y - 26.5 }, badge);
+    nodeEls[name] = g;
+  }
+
+  const caption = document.getElementById("stage-caption");
+  const stepItems = [...document.querySelectorAll("#steps li")];
+  const caller = (s) => s === "symptom";
+  const fault = (s) => s === "anomalous" || s === "root";
+
+  function render(state, badges, frame) {
+    for (const [name, g] of Object.entries(nodeEls)) {
+      g.dataset.state = state[name] || "normal";
+      g.querySelector(".badge text").textContent = badges[name] || "";
+    }
+    for (const e of edgeEls) e.line.classList.toggle("hot", caller(state[e.a]) && fault(state[e.b]));
+    caption.textContent = frame.text;
+    stepItems.forEach((li, i) => li.classList.toggle("on", i + 1 === frame.step));
+  }
+
+  let timer;
+  function play() {
+    clearTimeout(timer);
+    const state = {}, badges = {};
+    if (reduce) { // show the outcome without motion
+      timeline.forEach((f) => { Object.assign(state, f.set); Object.assign(badges, f.badge || {}); });
+      return render(state, badges, timeline[timeline.length - 1]);
+    }
+    let i = 0;
+    const tick = () => {
+      const f = timeline[i];
+      Object.assign(state, f.set); Object.assign(badges, f.badge || {});
+      render(state, badges, f);
+      if (++i < timeline.length) timer = setTimeout(tick, i === 1 ? 1200 : 2600);
+    };
+    tick();
+  }
+  document.getElementById("replay").addEventListener("click", play);
+  play();
+
+  /* ---------- results chart: RE1-OB, scripts/report.py output ---------- */
+  const series = [
+    { key: "corca", label: "CoRCA", color: "--s1" },
+    { key: "top1", label: "Single answer (top 1)", color: "--s2" },
+    { key: "top2", label: "Fixed top 2", color: "--s3" },
+    { key: "top3", label: "Fixed top 3", color: "--s4" },
+  ];
+  const data = {
+    BARO:  { corca: [0.772, 0.708, 0.833], top1: [0.736, 0.656, 0.816], top2: [0.587, 0.544, 0.619], top3: [0.464, 0.440, 0.484] },
+    CIRCA: { corca: [0.637, 0.564, 0.709], top1: [0.576, 0.488, 0.664], top2: [0.448, 0.395, 0.501], top3: [0.372, 0.332, 0.408] },
+  };
+  const css = getComputedStyle(document.documentElement);
+  const color = (v) => css.getPropertyValue(v).trim();
+
+  document.getElementById("legend").innerHTML = series
+    .map((s) => `<span><i style="background:var(${s.color})"></i>${s.label}</span>`).join("");
+  document.querySelector("#table tbody").innerHTML = Object.entries(data).flatMap(([ranker, d]) =>
+    series.map((s) => `<tr><td>${ranker}</td><td>${s.label}</td><td>${d[s.key][0].toFixed(3)}</td><td>${d[s.key][1].toFixed(3)} – ${d[s.key][2].toFixed(3)}</td></tr>`)).join("");
+
+  const bars = document.getElementById("bars");
+  const W = 560, H = 300, left = 36, bottom = 268, top = 12, plotH = bottom - top;
+  const y = (v) => bottom - v * plotH;
+  const grid = el("g", { class: "grid" }, bars);
+  [0, 0.25, 0.5, 0.75, 1].forEach((v) => {
+    el("line", { x1: left, x2: W, y1: y(v), y2: y(v) }, grid);
+    el("text", { x: left - 8, y: y(v) + 4, "text-anchor": "end" }, grid).textContent = v.toFixed(2);
+  });
+  const groups = Object.keys(data), groupW = (W - left) / groups.length, barW = 44, gap = 2;
+  const tip = document.getElementById("tip"), chart = document.getElementById("chart");
+  const axis = el("g", { class: "axis" }, bars);
+  groups.forEach((ranker, gi) => {
+    const x0 = left + gi * groupW + (groupW - series.length * (barW + gap)) / 2;
+    el("text", { x: left + gi * groupW + groupW / 2, y: H - 6, "text-anchor": "middle", class: "group" }, axis).textContent = ranker;
+    series.forEach((s, si) => {
+      const [v, lo, hi] = data[ranker][s.key];
+      const x = x0 + si * (barW + gap), cx = x + barW / 2;
+      // rounded top, square base anchored on the axis
+      const r = 4, h = v * plotH;
+      el("path", { class: "bar", style: `fill:var(${s.color});transition-delay:${(gi * 4 + si) * 60}ms`,
+        d: `M${x},${bottom} V${bottom - h + r} Q${x},${bottom - h} ${x + r},${bottom - h} H${x + barW - r} Q${x + barW},${bottom - h} ${x + barW},${bottom - h + r} V${bottom} Z` }, bars);
+      el("line", { class: "whisker", x1: cx, x2: cx, y1: y(lo), y2: y(hi) }, bars);
+      if (s.key === "corca") el("text", { class: "vlabel", x: cx, y: y(hi) - 6 }, bars).textContent = v.toFixed(2);
+      const hit = el("rect", { class: "hit", x: x - 1, y: top, width: barW + 2, height: plotH, tabindex: 0,
+        "aria-label": `${ranker}, ${s.label}: F1 ${v.toFixed(3)}, 95% CI ${lo.toFixed(3)} to ${hi.toFixed(3)}` }, bars);
+      const show = () => {
+        const box = bars.getBoundingClientRect(), scale = box.width / W, host = chart.getBoundingClientRect();
+        tip.innerHTML = `<strong>${s.label}</strong> · ${ranker}<br>F1 ${v.toFixed(3)} (${lo.toFixed(3)}–${hi.toFixed(3)})`;
+        tip.style.left = `${box.left - host.left + cx * scale}px`;
+        tip.style.top = `${box.top - host.top + y(hi) * scale - 6}px`;
+        tip.classList.add("show");
+      };
+      const hide = () => tip.classList.remove("show");
+      hit.addEventListener("pointerenter", show); hit.addEventListener("pointerleave", hide);
+      hit.addEventListener("focus", show); hit.addEventListener("blur", hide);
+    });
+  });
+  el("line", { x1: left, x2: W, y1: bottom, y2: bottom, stroke: color("--ink-2"), "stroke-width": 1 }, bars);
+
+  if (reduce || !("IntersectionObserver" in window)) chart.classList.add("in");
+  else new IntersectionObserver((entries, obs) => {
+    if (entries.some((e) => e.isIntersecting)) { chart.classList.add("in"); obs.disconnect(); }
+  }, { threshold: 0.35 }).observe(chart);
+})();
+</script>
+</body>
+</html>
