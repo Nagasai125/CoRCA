@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from corca.metrics import exact_match, set_prf, top_k_hit
+from corca.metrics import (TOP_K_BASELINES, TOP_K_COLUMNS, exact_match, set_prf,
+                           top_k_hit, top_k_set_scores)
 from corca.corca import STOPPING_POLICY
 from scripts.experiment import read_runs
 
@@ -120,6 +121,7 @@ def summarize(recs, q=0.9, fixed_taus=None):
                 "top3": top_k_hit(base_rank, truth, 3),
                 "top5": top_k_hit(base_rank, truth, 5),
                 "base_P": bp, "base_R": br, "base_F1": bf,
+                **top_k_set_scores(base_rank, truth),
                 "corca_P": precision, "corca_R": recall, "corca_F1": f1,
                 "corca_exact": exact_match(pred, truth), "corca_n_pred": len(pred),
                 "extra_roots": float(len(pred) > len(truth)),
@@ -178,7 +180,7 @@ def main():
     if not manifest:
         print("WARNING: legacy results lack experiment fingerprints; timings and failure detection are unverified.")
     df.to_csv(output / "summary.csv", index=False)
-    cols = ["top1", "top3", "top5", "base_F1", "corca_P", "corca_R", "corca_F1",
+    cols = ["top1", "top3", "top5", "base_F1", *TOP_K_COLUMNS, "corca_P", "corca_R", "corca_F1",
             "corca_exact", "corca_n_pred", "extra_roots", "failed", "timed_out",
             "baseline_seconds", "corca_seconds", "seconds"]
     aggregate = df.groupby(["method", "n_true"])[cols].mean()
@@ -199,7 +201,8 @@ def main():
               "scoring_stopping_policy": STOPPING_POLICY,
               "failure_policy": "all attempted cases included; unavailable predictions score zero",
               "timing_policy": "includes spawned-worker startup; CoRCA runs up to max_rounds with tau=None",
-              "baseline_policy": "set baseline receives oracle root count",
+              "baseline_policy": "base_* receives oracle root count; topKset_* returns a fixed top-k "
+                                 f"set for k in {list(TOP_K_BASELINES)} without knowing the root count",
               "status_counts": {m: g["status"].value_counts().to_dict() for m, g in df.groupby("method")},
               "diagnosis_status_counts": {m: g["diagnosis_status"].value_counts().to_dict()
                                           for m, g in df.groupby("method")}}

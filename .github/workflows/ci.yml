@@ -1,0 +1,13 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --extra dev
+      # Same pins as the API image (runtime/Dockerfile); RCAEval without its heavy extras.
+      - run: uv pip install --no-deps RCAEval==1.8.0 && uv pip install -r runtime/requirements.txt
+      - run: uv run --no-sync python -m pytest -q tests runtime
+        env: {PYTHONPATH: .}

@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9"]
+dev = ["pytest>=8,<9", "httpx>=0.27,<1"]  # httpx: FastAPI TestClient
 
 [project.scripts]
 corca-run = "scripts.run_eval:main"

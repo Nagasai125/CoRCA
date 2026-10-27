@@ -151,3 +151,17 @@ def test_held_out_calibration_and_failure_denominator():
     multi = dict(records[0], truth=["a", "b"])
     with pytest.raises(ValueError, match="multi-fault"):
         summarize([multi])
+
+
+def test_fixed_top_k_set_baselines():
+    rec = {"case": "c", "method": "baro", "case_id": "1", "truth": ["a", "b"],
+           "base_rank": ["a", "x", "b", "y"], "status": "ok",
+           "rounds": [{"service": "a", "residual": 0.0, "confidence": 1.0}]}
+    row = summarize([rec], fixed_taus={"baro": 1.0})[0].iloc[0]
+    # top-2 = {a, x}: 1 of 2 correct
+    assert row["top2set_P"] == 0.5 and row["top2set_R"] == 0.5 and row["top2set_exact"] == 0
+    # top-3 = {a, x, b}: both roots found, one extra
+    assert row["top3set_R"] == 1.0 and abs(row["top3set_P"] - 2 / 3) < 1e-9
+    assert row["top3set_exact"] == 0
+    # oracle count (k=2) is the same set as top-2 here
+    assert row["base_F1"] == row["oracle_k_F1"] == row["top2set_F1"] and row["oracle_k_exact"] == 0

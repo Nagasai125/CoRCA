@@ -19,7 +19,8 @@ from corca.base import rank_metrics, services_from_metrics
 from corca.circa import FEATURE_POLICY, InsufficientEvidence
 from corca.corca import STOPPING_POLICY
 from corca.execution import call_with_timeout
-from corca.metrics import exact_match, set_prf
+from corca.metrics import (TOP_K_BASELINES, TOP_K_COLUMNS, exact_match, set_prf,
+                           top_k_set_scores)
 from runtime.api import Incident, calibration_thresholds, prepare_window
 from runtime.client import incident_payload
 from scripts.summarize import calibrate, calibration_residuals, diagnosis_evidence, predicted_set, result_policies, validate_calibration_split
@@ -81,7 +82,8 @@ def score(records, taus):
                      "failure_rate": float(record["status"] == "error"),
                      "timeout_rate": float(record["status"] == "timeout"),
                      "insufficient_evidence_rate": float(record["status"] == "insufficient_evidence"),
-                     "base_F1": base_f, "corca_P": p, "corca_R": r, "corca_F1": f,
+                     "base_F1": base_f, **top_k_set_scores(record["base_rank"], truth),
+                     "corca_P": p, "corca_R": r, "corca_F1": f,
                      "corca_exact": exact_match(pred, truth), "n_pred": len(pred),
                      "seconds": record["seconds"], "baseline_seconds": record["baseline_seconds"]})
     return pd.DataFrame(rows)
@@ -119,7 +121,7 @@ def write_reports(output, records, methods, expected=None, fixed_calibration=Non
     frame = score(evaluation, thresholds)
     frame.to_csv(output / "summary.csv", index=False)
     groups = ["method", "drop", "keep_resource", "graph_mode", "n_true", "calibrated"]
-    measurements = ["base_F1", "corca_P", "corca_R", "corca_F1", "corca_exact", "seconds",
+    measurements = ["base_F1", *TOP_K_COLUMNS, "corca_P", "corca_R", "corca_F1", "corca_exact", "seconds",
                     "execution_success_rate", "failure_rate", "timeout_rate", "insufficient_evidence_rate"]
     if frame.empty:
         aggregate = pd.DataFrame(columns=groups + measurements + ["n"])
@@ -140,7 +142,8 @@ def write_reports(output, records, methods, expected=None, fixed_calibration=Non
         "record_stopping_policy": stopping_policy,
         "scoring_stopping_policy": STOPPING_POLICY,
         "failure_policy": "all attempts included; missing calibration yields empty predictions scored zero, not measured algorithm accuracy",
-        "baseline_policy": "base_F1 receives the oracle root count",
+        "baseline_policy": "base_F1/oracle_k_* receive the oracle root count; topKset_* return a fixed "
+                           f"top-k set for k in {list(TOP_K_BASELINES)} without knowing the root count",
         "timing_policy": "includes worker startup and up to 3 rounds with tau=None; not deployed early-stop latency",
         "sample_policy": "dropout seeds reuse incidents; they are not independent incident repeats",
         "limitations": ["incident coverage and statistical power must be reviewed before generalization claims",
