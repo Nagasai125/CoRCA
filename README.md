@@ -131,6 +131,10 @@ they are not directories automatically created by the runner.
 The API diagnoses incidents from Prometheus by itself: give it a time, or point
 Alertmanager at it. Results are stored (SQLite) and survive restarts.
 
+Open `/` for the product page and `/app` for the console: sign in with the API
+key, start a diagnosis by picking when the problem began, and read the root
+causes round by round. Alert-started diagnoses appear in the same list.
+
 ```bash
 docker build -f runtime/Dockerfile -t corca:0.2.0 .
 python -m runtime.deploy --image corca:0.2.0 --calibration results/controls-v1/calibration.json

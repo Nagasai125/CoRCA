@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CoRCA Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f8fb; --surface: #ffffff; --ink: #14213d; --ink-2: #4a5468; --line: #d9dfe8;
+    --fault: #c8303a; --fault-tint: #fbe3e3; --root: #2a78d6; --root-tint: #e3eefb;
+    --warn: #8a5a00; --warn-tint: #fdf0d2; --quiet: #eef1f5; --selected: #e9f1fc;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1626; --surface: #172036; --ink: #edf1f7; --ink-2: #a9b3c4; --line: #2c3850;
+      --fault: #f0646a; --fault-tint: #3d1d25; --root: #5598e7; --root-tint: #1d3152;
+      --warn: #f2b84b; --warn-tint: #3a2e12; --quiet: #1d2740; --selected: #1d2c48;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--root); }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--root); outline-offset: 2px; border-radius: 6px; }
+  code, .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: .88em; }
+  [hidden] { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  header.top { border-bottom: 1px solid var(--line); background: var(--surface); }
+  header.top .in { max-width: 1240px; margin: 0 auto; padding: 0 20px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { font-weight: 600; font-size: 17px; color: var(--ink); text-decoration: none; display: flex; gap: 9px; align-items: center; }
+  .brand svg { width: 20px; height: 20px; }
+  .brand small { font-weight: 400; color: var(--ink-2); font-size: 15px; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 15px; font-weight: 500; text-decoration: none; color: var(--ink); }
+  .btn:hover { border-color: var(--ink-2); }
+  .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn.primary:hover { background: var(--root); border-color: var(--root); }
+  .btn.quiet { border-color: transparent; background: transparent; color: var(--ink-2); }
+  .btn.quiet:hover { color: var(--ink); background: var(--quiet); }
+  .btn:disabled { opacity: .55; cursor: default; }
+
+  /* sign in */
+  .signin { min-height: calc(100vh - 57px); display: grid; place-items: center; padding: 24px 16px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 28px; width: 100%; max-width: 420px; }
+  .panel h1 { font-size: 24px; margin: 0 0 6px; font-weight: 600; }
+  .panel p.help { margin: 0 0 22px; color: var(--ink-2); font-size: 15px; }
+  label.field { display: block; font-weight: 500; font-size: 15px; margin-bottom: 6px; }
+  input[type=password], input[type=datetime-local], input[type=number], select {
+    width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+  }
+  input:focus-visible, select:focus-visible { outline-offset: 0; }
+  .check { display: flex; gap: 10px; align-items: center; margin: 14px 0 20px; font-size: 15px; color: var(--ink-2); min-height: 32px; }
+  .check input { width: 18px; height: 18px; }
+  .error { color: var(--fault); font-size: 15px; margin: 10px 0 0; }
+  .panel .btn.primary { width: 100%; }
+
+  /* console */
+  .console { max-width: 1240px; margin: 0 auto; padding: 24px 20px 48px; display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .banner { grid-column: 1 / -1; display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; border-radius: 12px; background: var(--warn-tint); color: var(--ink); font-size: 15px; }
+  .banner svg { flex: none; margin-top: 3px; color: var(--warn); }
+  .listhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .listhead h1 { font-size: 22px; margin: 0; font-weight: 600; }
+
+  form.new { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 14px; display: grid; gap: 14px; }
+  form.new h2 { font-size: 17px; margin: 0; font-weight: 600; }
+  form.new .hint { font-size: 14px; color: var(--ink-2); margin: 6px 0 0; }
+  .quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .quick button { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 14px; color: var(--ink-2); }
+  .quick button:hover { color: var(--ink); border-color: var(--ink-2); }
+  .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; background: var(--bg); }
+  .segmented label { position: relative; }
+  .segmented input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+  .segmented span { display: inline-flex; min-height: 36px; align-items: center; padding: 0 16px; border-radius: 7px; font-size: 15px; color: var(--ink-2); }
+  .segmented input:checked + span { background: var(--surface); color: var(--ink); font-weight: 500; box-shadow: 0 0 0 1px var(--line); }
+  .segmented input:focus-visible + span { outline: 3px solid var(--root); }
+  details.more summary { cursor: pointer; font-size: 14px; color: var(--ink-2); min-height: 32px; display: inline-flex; align-items: center; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  .two label { font-size: 14px; color: var(--ink-2); display: block; margin-bottom: 4px; }
+  .formfoot { display: flex; gap: 8px; justify-content: flex-end; }
+
+  ul.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .item { width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; cursor: pointer; display: grid; gap: 6px; }
+  .item:hover { border-color: var(--ink-2); }
+  .item[aria-current="true"] { border-color: var(--root); background: var(--selected); }
+  .item .row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  .item .what { font-weight: 600; font-size: 15px; overflow-wrap: anywhere; }
+  .item .what.muted { font-weight: 400; color: var(--ink-2); }
+  .item .when { font-size: 14px; color: var(--ink-2); }
+  .empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 28px 20px; text-align: center; color: var(--ink-2); font-size: 15px; }
+  .empty p { margin: 0 0 14px; }
+  #new-form:not([hidden]) + .list .empty { display: none; } /* the open form is already the call to action */
+
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 3px 10px 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .chip svg { width: 14px; height: 14px; flex: none; }
+  .tone-good { background: var(--root-tint); color: var(--root); }
+  .tone-warn { background: var(--warn-tint); color: var(--warn); }
+  .tone-bad { background: var(--fault-tint); color: var(--fault); }
+  .tone-muted { background: var(--quiet); color: var(--ink-2); }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .detail { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 28px; min-height: 320px; }
+  .detail.placeholder { display: grid; place-items: center; text-align: center; color: var(--ink-2); }
+  .detail h2 { font-size: 15px; font-weight: 500; color: var(--ink-2); margin: 0 0 8px; }
+  .roots { display: flex; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 12px; padding: 0; list-style: none; }
+  .roots li { font-size: clamp(22px, 2.6vw, 30px); font-weight: 600; letter-spacing: -.01em; overflow-wrap: anywhere; }
+  .roots li + li::before { content: "+"; color: var(--ink-2); font-weight: 400; margin-right: 12px; }
+  .noroots { font-size: 22px; font-weight: 600; margin: 0 0 12px; }
+  .explain { margin: 12px 0 0; color: var(--ink); max-width: 44em; }
+  .sec { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 20px; }
+  .sec h3 { font-size: 16px; margin: 0 0 12px; font-weight: 600; }
+  ol.rounds { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: r; }
+  ol.rounds li { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; counter-increment: r; }
+  ol.rounds li::before { content: counter(r); width: 32px; height: 32px; border-radius: 50%; background: var(--root-tint); color: var(--root); display: grid; place-items: center; font-weight: 600; font-size: 14px; }
+  ol.rounds .svc { font-weight: 600; overflow-wrap: anywhere; }
+  ol.rounds .meta { color: var(--ink-2); font-size: 14px; }
+  .meter { height: 6px; border-radius: 3px; background: var(--quiet); margin: 6px 0 4px; max-width: 280px; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--root); border-radius: 3px; }
+  .warnlist { background: var(--warn-tint); border-radius: 10px; padding: 12px 16px; font-size: 15px; }
+  dl.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; margin: 0; font-size: 15px; }
+  dl.facts dt { color: var(--ink-2); }
+  dl.facts dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  details.raw summary { cursor: pointer; color: var(--ink-2); font-size: 14px; min-height: 32px; display: inline-flex; align-items: center; }
+  details.raw pre { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow: auto; max-height: 360px; font-size: 13px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-size: 15px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 860px) {
+    .console { grid-template-columns: 1fr; }
+    .detail { padding: 22px 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } .toast { transition: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="in">
+    <a class="brand" href="/" aria-label="CoRCA home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="5" cy="19" r="3" fill="#2a78d6"/><circle cx="19" cy="19" r="3" fill="#2a78d6"/><path d="M10.5 7.5 6.5 16.5M13.5 7.5l4 9" stroke="currentColor" stroke-width="2"/></svg>
+      CoRCA <small>Console</small>
+    </a>
+    <button class="btn quiet" id="signout" type="button" hidden>Sign out</button>
+  </div>
+</header>
+
+<main id="signin" class="signin" hidden>
+  <form class="panel" id="signin-form" novalidate>
+    <h1>Sign in</h1>
+    <p class="help">Use the API key of this CoRCA service. Whoever deployed it can find the key in <code>runtime/.state/api-token</code>.</p>
+    <label class="field" for="key">API key</label>
+    <input id="key" type="password" autocomplete="current-password" required aria-describedby="signin-error">
+    <label class="check"><input id="remember" type="checkbox"> Keep me signed in on this device</label>
+    <button class="btn primary" type="submit" id="signin-btn">Sign in</button>
+    <p class="error" id="signin-error" role="alert"></p>
+  </form>
+</main>
+
+<main id="console" class="console" hidden>
+  <div class="banner" id="banner" role="status" hidden>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
+    <span id="banner-text"></span>
+  </div>
+
+  <section aria-labelledby="list-title">
+    <div class="listhead">
+      <h1 id="list-title">Diagnoses</h1>
+      <button class="btn primary" id="new-btn" type="button" aria-expanded="false" aria-controls="new-form">New diagnosis</button>
+    </div>
+
+    <form class="new" id="new-form" hidden novalidate>
+      <h2>Diagnose an incident</h2>
+      <div>
+        <label class="field" for="started">When did the problem start?</label>
+        <input id="started" type="datetime-local" step="60" required>
+        <div class="quick" role="group" aria-label="Quick picks">
+          <button type="button" data-ago="2">2 min ago</button>
+          <button type="button" data-ago="5">5 min ago</button>
+          <button type="button" data-ago="15">15 min ago</button>
+          <button type="button" data-ago="60">1 hour ago</button>
+        </div>
+        <p class="hint">CoRCA compares the minutes before this time with the minutes after it. If you are unsure, pick a slightly earlier time: a time that is too late can hide a root cause.</p>
+      </div>
+      <fieldset style="border:0;padding:0;margin:0" id="method-field">
+        <legend class="field" style="padding:0;margin-bottom:6px;font-weight:500;font-size:15px">Ranking method</legend>
+        <div class="segmented" id="methods"></div>
+      </fieldset>
+      <details class="more">
+        <summary>Window lengths</summary>
+        <div class="two">
+          <div><label for="normal">Healthy minutes before</label><input id="normal" type="number" min="1" max="60" value="5"></div>
+          <div><label for="after">Minutes after start</label><input id="after" type="number" min="1" max="30" value="2"></div>
+        </div>
+      </details>
+      <p class="error" id="new-error" role="alert"></p>
+      <div class="formfoot">
+        <button class="btn quiet" type="button" id="cancel-new">Cancel</button>
+        <button class="btn primary" type="submit" id="start-btn">Start diagnosis</button>
+      </div>
+    </form>
+
+    <ul class="list" id="list" aria-live="polite"></ul>
+  </section>
+
+  <section class="detail placeholder" id="detail" aria-live="polite" tabindex="-1">
+    <p>Select a diagnosis to see its root causes.</p>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  /* ---------- small helpers (server data only ever goes into textContent) ---------- */
+  const $ = (id) => document.getElementById(id);
+  function h(tag, props, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (k === "class") e.className = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) e.append(kid instanceof Node ? kid : String(kid));
+    return e;
+  }
+  const ICONS = {
+    check: '<path d="M5 12.5 10 17l9-10"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    warn: '<path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/>',
+    x: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
+    spin: '<path d="M21 12a9 9 0 1 1-9-9"/>',
+    dash: '<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',
+  };
+  function icon(name) { // fixed markup from ICONS only, never server data
+    const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("fill", "none"); s.setAttribute("stroke", "currentColor");
+    s.setAttribute("stroke-width", "2.4"); s.setAttribute("stroke-linecap", "round"); s.setAttribute("aria-hidden", "true");
+    s.innerHTML = ICONS[name];
+    if (name === "spin") s.classList.add("spin");
+    return s;
+  }
+  const store = {
+    get() { try { return sessionStorage.getItem("corca-key") || localStorage.getItem("corca-key"); } catch { return null; } },
+    set(key, remember) { try { (remember ? localStorage : sessionStorage).setItem("corca-key", key); } catch {} },
+    clear() { try { sessionStorage.removeItem("corca-key"); localStorage.removeItem("corca-key"); } catch {} },
+  };
+  const fmtTime = (s) => new Date(s * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const fmtClock = (s) => new Date(s * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  function ago(s) {
+    const m = Math.round((Date.now() / 1000 - s) / 60);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m} min ago`;
+    if (m < 1440) return `${Math.round(m / 60)} h ago`;
+    return fmtTime(s);
+  }
+  function toast(text) {
+    const t = $("toast"); t.textContent = text; t.classList.add("show");
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3500);
+  }
+
+  /* ---------- API ---------- */
+  let key = store.get();
+  class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
+  async function api(path, options = {}) {
+    let res;
+    try {
+      res = await fetch(path, { ...options, headers: { "X-API-Key": key, "Content-Type": "application/json", ...(options.headers || {}) } });
+    } catch { throw new ApiError(0, "Can't reach the CoRCA service. Check your connection; retrying automatically."); }
+    if (res.status === 401) { signOut("That key was not accepted. Check it and try again."); throw new ApiError(401, "signed out"); }
+    let body = null;
+    try { body = await res.json(); } catch {}
+    if (!res.ok) {
+      const d = body && body.detail;
+      const msg = Array.isArray(d) ? d.map((x) => x.msg).join("; ") : d || `Request failed (${res.status}).`;
+      throw new ApiError(res.status, msg);
+    }
+    return body;
+  }
+
+  /* ---------- status vocabulary ---------- */
+  function statusOf(job) {
+    if (job.status === "queued") return { label: "Waiting for data", tone: "muted", icon: "clock",
+      text: `CoRCA waits until the fault has shown up in the metrics. Analysis starts at about ${fmtClock(job.window[1] + 15)}.` };
+    if (job.status === "running") return { label: "Analyzing", tone: "muted", icon: "spin",
+      text: "Pulling metrics from Prometheus and ranking services. This usually takes under a minute." };
+    if (job.status === "failed") return { label: "Failed", tone: "bad", icon: "x",
+      text: job.error || "The diagnosis could not run." };
+    const r = job.result || {};
+    // CoRCA always names one cause (an alert fired); say so when even that one is below threshold.
+    if (r.rounds && r.rounds.length && r.tau != null && r.rounds[0].score <= r.tau) return {
+      label: "Weak evidence", tone: "warn", icon: "warn",
+      text: `The strongest anomaly scored ${r.rounds[0].score.toFixed(1)}, below this server's threshold of ${r.tau.toFixed(1)}, `
+        + "so treat this cause as a lead, not an answer. Check the incident start time: a start that is too late hides the fault." };
+    return {
+      diagnosed: { label: "Diagnosed", tone: "good", icon: "check",
+        text: "Every significant anomaly in this window is explained by the root causes above." },
+      partial_unexplained: { label: "Partly explained", tone: "warn", icon: "warn",
+        text: "These root causes explain part of the incident. The services listed under “Still unexplained” need a manual look." },
+      partial_timeout: { label: "Timed out", tone: "warn", icon: "warn",
+        text: "The analysis ran out of time. Root causes found before that are shown; the rest of the window was not analyzed." },
+      insufficient_evidence: { label: "Not enough data", tone: "warn", icon: "dash",
+        text: "Too few metrics had data in this window to name a root cause. Check that Prometheus was scraping these services." },
+      no_significant_anomaly: { label: "No anomaly", tone: "muted", icon: "dash",
+        text: "Nothing in this window was abnormal enough to diagnose." },
+    }[r.status] || { label: r.status || "Done", tone: "muted", icon: "check", text: "" };
+  }
+  const chip = (st) => h("span", { class: `chip tone-${st.tone}` }, icon(st.icon), st.label);
+  const active = (job) => job.status === "queued" || job.status === "running";
+
+  /* ---------- state ---------- */
+  let config = null, jobs = [], selected = null, pollTimer = null, lastError = "";
+
+  function showBanner(text) { $("banner").hidden = !text; $("banner-text").textContent = text || ""; }
+
+  async function refresh() {
+    clearTimeout(pollTimer);
+    try {
+      jobs = await api("/v1/diagnoses?limit=50");
+      lastError = "";
+      if (selected && !jobs.some((j) => j.id === selected)) {
+        try { jobs.push(await api(`/v1/diagnoses/${encodeURIComponent(selected)}`)); } catch {}
+      }
+      renderList(); renderDetail();
+    } catch (e) {
+      if (e.status === 401) return;
+      lastError = e.message;
+    }
+    showBanner(lastError || configWarning());
+    if (!key) return;
+    pollTimer = setTimeout(refresh, document.hidden ? 60000 : jobs.some(active) ? 4000 : 30000);
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && key) refresh(); });
+
+  function configWarning() {
+    if (!config) return "";
+    if (!config.prometheus) return "This server has no Prometheus source configured, so it can't run diagnoses from here. Deploy it with a source config (CORCA_SOURCE).";
+    if (!config.methods.length) return "This server has no calibration loaded, so diagnoses can't start yet. Deploy it with a calibration file.";
+    return "";
+  }
+
+  /* ---------- list ---------- */
+  function renderList() {
+    const list = $("list");
+    list.replaceChildren();
+    if (!jobs.length) {
+      list.append(h("li", { class: "empty" },
+        h("p", {}, "No diagnoses yet. Start one for an incident, or connect Alertmanager so alerts start them for you."),
+        h("button", { class: "btn", type: "button", onclick: openForm }, "New diagnosis")));
+      return;
+    }
+    for (const job of jobs) {
+      const st = statusOf(job);
+      const roots = job.result && job.result.root_causes || [];
+      list.append(h("li", {}, h("button", {
+        class: "item", type: "button", "aria-current": job.id === selected ? "true" : "false",
+        onclick: () => select(job.id, true),
+      },
+        h("div", { class: "row" },
+          h("span", { class: roots.length ? "what" : "what muted" },
+            roots.length ? roots.join(" + ") : active(job) ? "Diagnosing" : "No root cause named"),
+          chip(st)),
+        h("div", { class: "when" }, `Incident ${ago(job.inject_time)} · ${job.method.toUpperCase()}`))));
+    }
+  }
+
+  function select(id, focus) {
+    selected = id;
+    if (location.hash !== `#${id}`) history.replaceState(null, "", `#${id}`);
+    renderList(); renderDetail();
+    if (focus && matchMedia("(max-width: 860px)").matches) { $("detail").focus(); $("detail").scrollIntoView({ block: "start" }); }
+  }
+
+  /* ---------- detail ---------- */
+  function renderDetail() {
+    const d = $("detail");
+    const job = jobs.find((j) => j.id === selected);
+    if (!job) {
+      d.className = "detail placeholder";
+      d.replaceChildren(h("p", {}, jobs.length ? "Select a diagnosis to see its root causes." : "Diagnoses you start will appear here."));
+      return;
+    }
+    d.className = "detail";
+    const st = statusOf(job), r = job.result || {};
+    const roots = r.root_causes || [];
+    const nodes = [
+      h("div", { class: "row", style: "display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px" },
+        h("h2", {}, roots.length ? (roots.length === 1 ? "Root cause" : `${roots.length} root causes`) : "Diagnosis"), chip(st)),
+      roots.length ? h("ul", { class: "roots" }, roots.map((s) => h("li", {}, s)))
+                   : h("p", { class: "noroots" }, active(job) ? "In progress" : "No root cause named"),
+      h("p", { class: "explain" }, st.text),
+    ];
+
+    if (r.rounds && r.rounds.length) {
+      nodes.push(h("div", { class: "sec" }, h("h3", {}, "How it was found"),
+        h("ol", { class: "rounds" }, r.rounds.map((round) => h("li", {}, h("div", {},
+          h("div", { class: "svc" }, round.service),
+          h("div", { class: "meter", role: "img", "aria-label": `Score share ${Math.round(round.confidence * 100)} percent` },
+            h("i", { style: `width:${Math.max(2, Math.min(100, round.confidence * 100))}%` })),
+          h("div", { class: "meta" }, `Score share ${Math.round(round.confidence * 100)}% against the next service`),
+          h("div", { class: "meta" }, round.explained && round.explained.length
+            ? `Explained symptoms in ${round.explained.join(", ")}` : "No other services needed explaining")))))));
+    }
+    if (r.unexplained_services && r.unexplained_services.length) {
+      nodes.push(h("div", { class: "sec" }, h("h3", {}, "Still unexplained"),
+        h("div", { class: "warnlist" }, r.unexplained_services.join(", "))));
+    }
+    const facts = [
+      ["Incident start", fmtTime(job.inject_time)],
+      ["Window", `${fmtClock(job.window[0])} – ${fmtClock(job.window[1])}`],
+      ["Method", job.method.toUpperCase()],
+      r.dropped_metrics && r.dropped_metrics.length ? ["Metrics without data", r.dropped_metrics.join(", ")] : null,
+      job.attempts > 1 ? ["Attempts", String(job.attempts)] : null,
+      ["Diagnosis ID", h("span", { class: "mono" }, job.id)],
+    ].filter(Boolean);
+    nodes.push(h("div", { class: "sec" }, h("h3", {}, "Details"),
+      h("dl", { class: "facts" }, facts.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]))));
+    if (roots.length) nodes.push(h("p", { class: "meta", style: "color:var(--ink-2);font-size:14px;margin:14px 0 0" },
+      "Score share compares anomaly scores; it is not a probability."));
+
+    const actions = h("div", { class: "actions" },
+      h("button", { class: "btn", type: "button", onclick: () => copyLink(job) }, "Copy link"),
+      !active(job) && h("button", { class: "btn", type: "button", onclick: () => rerun(job) }, "Run again"));
+    nodes.push(actions);
+    if (job.result) nodes.push(h("details", { class: "raw" }, h("summary", {}, "Show raw result"),
+      h("pre", {}, JSON.stringify(job.result, null, 2))));
+    d.replaceChildren(...nodes);
+  }
+
+  async function copyLink(job) {
+    const url = `${location.origin}${location.pathname}#${job.id}`;
+    try { await navigator.clipboard.writeText(url); toast("Link copied."); }
+    catch { toast(url); }
+  }
+
+  async function rerun(job) {
+    try {
+      const created = await api("/v1/diagnoses", { method: "POST", body: JSON.stringify({
+        inject_time: job.inject_time, method: job.method,
+        normal_seconds: Math.round(job.inject_time - job.window[0]),
+        anomaly_seconds: Math.round(job.window[1] - job.inject_time) }) });
+      toast("Diagnosis started again.");
+      selected = created.id; refresh();
+    } catch (e) { if (e.status !== 401) toast(e.message); }
+  }
+
+  /* ---------- new diagnosis ---------- */
+  const pad = (n) => String(n).padStart(2, "0");
+  function setStarted(minutesAgo) {
+    const t = new Date(Date.now() - minutesAgo * 60000);
+    $("started").value = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}T${pad(t.getHours())}:${pad(t.getMinutes())}`;
+  }
+  function openForm() {
+    $("new-form").hidden = false; $("new-btn").setAttribute("aria-expanded", "true");
+    $("new-error").textContent = "";
+    if (!$("started").value) setStarted(5);
+    $("started").focus();
+  }
+  function closeForm() { $("new-form").hidden = true; $("new-btn").setAttribute("aria-expanded", "false"); $("new-btn").focus(); }
+  $("new-btn").addEventListener("click", () => ($("new-form").hidden ? openForm() : closeForm()));
+  $("cancel-new").addEventListener("click", closeForm);
+  document.querySelectorAll(".quick button").forEach((b) => b.addEventListener("click", () => setStarted(+b.dataset.ago)));
+  $("new-form").addEventListener("keydown", (e) => { if (e.key === "Escape") closeForm(); });
+
+  $("new-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = $("new-error"); err.textContent = "";
+    const started = new Date($("started").value).getTime() / 1000;
+    const normal = Math.round(+$("normal").value * 60), after = Math.round(+$("after").value * 60);
+    const method = (document.querySelector('input[name="method"]:checked') || {}).value;
+    if (!$("started").value || !Number.isFinite(started)) return (err.textContent = "Enter when the problem started.");
+    if (started > Date.now() / 1000 + 60) return (err.textContent = "The start time is in the future.");
+    if (!(normal >= 60 && normal <= 3600)) return (err.textContent = "Healthy minutes before must be between 1 and 60.");
+    if (!(after >= 60 && after <= 1800)) return (err.textContent = "Minutes after start must be between 1 and 30.");
+    if (!method) return (err.textContent = "This server has no calibrated method yet.");
+    $("start-btn").disabled = true;
+    try {
+      const job = await api("/v1/diagnoses", { method: "POST",
+        body: JSON.stringify({ inject_time: started, method, normal_seconds: normal, anomaly_seconds: after }) });
+      closeForm();
+      toast(job.status === "queued" && job.window[1] + 15 > Date.now() / 1000
+        ? `Diagnosis started. Results after ${fmtClock(job.window[1] + 15)}.` : "Diagnosis started.");
+      selected = job.id; await refresh();
+    } catch (ex) {
+      if (ex.status !== 401) err.textContent = ex.message;
+    } finally { $("start-btn").disabled = false; }
+  });
+
+  function renderMethods() {
+    const box = $("methods"); box.replaceChildren();
+    const methods = config && config.methods || [];
+    $("method-field").hidden = methods.length < 2; // one choice is not a choice
+    methods.forEach((m, i) => box.append(h("label", {},
+      h("input", { type: "radio", name: "method", value: m, checked: i === 0 }), h("span", {}, m.toUpperCase()))));
+    $("new-btn").disabled = !(config && config.prometheus && methods.length);
+  }
+
+  /* ---------- sign in / out ---------- */
+  function showSignin(message) {
+    $("console").hidden = true; $("signout").hidden = true; $("signin").hidden = false;
+    $("signin-error").textContent = message || "";
+    $("key").value = ""; $("key").focus();
+  }
+  function signOut(message) {
+    clearTimeout(pollTimer); key = null; store.clear(); config = null; jobs = []; selected = null;
+    history.replaceState(null, "", location.pathname);
+    showSignin(message);
+  }
+  $("signout").addEventListener("click", () => signOut(""));
+
+  async function start() {
+    try { config = await api("/v1/config"); }
+    catch (e) {
+      if (e.status === 401) return;
+      $("signin").hidden = false; $("console").hidden = true;
+      $("signin-error").textContent = e.message;
+      return false;
+    }
+    $("signin").hidden = true; $("console").hidden = false; $("signout").hidden = false;
+    renderMethods();
+    selected = location.hash.slice(1) || null;
+    await refresh();
+    if (!selected && jobs.length) select(jobs[0].id, false);
+    return true;
+  }
+
+  $("signin-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const value = $("key").value.trim();
+    if (!value) return ($("signin-error").textContent = "Enter your API key.");
+    key = value; $("signin-btn").disabled = true; $("signin-error").textContent = "";
+    if (await start() === true) store.set(value, $("remember").checked);
+    $("signin-btn").disabled = false;
+  });
+  window.addEventListener("hashchange", () => { const id = location.hash.slice(1); if (id && id !== selected) select(id, false); });
+
+  if (key) start(); else showSignin("");
+})();
+</script>
+</body>
+</html>

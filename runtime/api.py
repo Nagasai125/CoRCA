@@ -265,6 +265,9 @@ def diagnose(incident, thresholds, timeout):
         return {"status": "insufficient_evidence", "root_causes": [], "rounds": [],
                 "reason": str(exc), "dropped_metrics": unusable}
     output = asdict(result)
+    observed = {service_of(c) for c in remaining}
+    for round_ in output["rounds"]:  # list only services we saw, not topology-only nodes like frontend-external
+        round_["explained"] = [s for s in round_["explained"] if s in observed]
     output.update(status="partial_timeout" if result.timed_out else
                   "insufficient_evidence" if not result.root_causes else
                   "partial_unexplained" if result.remaining_anomaly_score > tau else "diagnosed",
@@ -332,11 +335,22 @@ def create_app(token, thresholds=None, timeout=20, concurrency=2, source=None, d
         if method not in thresholds:
             raise HTTPException(422, f"no calibrated tau for {method}; deploy with a calibration file")
 
-    landing = (Path(__file__).parent / "web" / "index.html").read_text()
+    web = Path(__file__).parent / "web"
+    landing, console = (web / "index.html").read_text(), (web / "app.html").read_text()
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def home():
         return landing
+
+    @app.get("/app", response_class=HTMLResponse, include_in_schema=False)
+    def app_page():
+        return console
+
+    @app.get("/v1/config", dependencies=[Depends(authorized)])
+    def config():
+        """What this server can do, so clients only offer working options."""
+        return {"methods": sorted(thresholds), "prometheus": jobs is not None,
+                "alert_method": source["alert_method"] if source else None}
 
     @app.get("/healthz")
     def health():

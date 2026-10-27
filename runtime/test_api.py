@@ -23,6 +23,10 @@ def test_authentication_and_health():
         assert client.get("/healthz").status_code == 200
         home = client.get("/")
         assert home.status_code == 200 and "find every root cause" in home.text
+        assert client.get("/app").status_code == 200
+        assert client.get("/v1/config").status_code == 401
+        assert client.get("/v1/config", headers={"X-API-Key": TOKEN}).json() == {
+            "methods": [], "prometheus": False, "alert_method": None}
         assert client.post("/diagnose", json=payload()).status_code == 401
         assert client.get("/readyz").status_code == 503  # not ready without calibration
         assert client.get("/openapi.json").status_code == 401
@@ -209,6 +213,7 @@ def test_window_job_pulls_metrics_and_keeps_result(tmp_path):
         job = wait_done(client, response.json()["id"], headers)
         assert job["status"] == "done" and "cartservice" in job["result"]["root_causes"]
         assert [j["id"] for j in client.get("/v1/diagnoses", headers=headers).json()] == [job["id"]]
+        assert client.get("/v1/config", headers=headers).json()["methods"] == ["baro"]
         assert client.post("/v1/diagnoses", json={"inject_time": T0, "method": "circa"},
                            headers=headers).status_code == 422  # circa not calibrated
         assert client.get("/v1/diagnoses/nope", headers=headers).status_code == 404
@@ -288,3 +293,12 @@ def test_export_cases_rewrites_metrics_from_the_source(tmp_path, monkeypatch):
     assert "cartservice_cpu" in pd.read_csv(tmp_path / "live/cartservice_cpu/1/metrics.csv").columns
     with pytest.raises(FileExistsError):
         export(SOURCE, tmp_path / "lab", tmp_path / "live")
+
+
+def test_explained_lists_only_observed_services():
+    data = payload()
+    data["edges"] = [["gateway", "frontend"], ["frontend", "cartservice"]]  # gateway has no metrics
+    with TestClient(create_app(TOKEN)) as client:
+        result = client.post("/diagnose", json=data, headers={"X-API-Key": TOKEN}).json()
+    assert result["rounds"][0]["service"] == "cartservice"
+    assert result["rounds"][0]["explained"] == ["frontend"]
