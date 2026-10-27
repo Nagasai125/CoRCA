@@ -28,7 +28,18 @@ $PY -m scripts.summarize results/re1ob-final/runs.jsonl
 
 # 4. Final tables for the report.
 $PY -m scripts.report results/re1ob-final results/heldout-v1 --out results/final
+
+# 5. Deploy the service with a tau fitted on the metrics it will see (Prometheus cpu/mem).
+#    Run right after step 1: lab Prometheus loses history when its pod restarts.
+kubectl --kubeconfig lab/.state/kubeconfig -n corca port-forward service/prometheus 9090:9090 &
+$PY -m runtime.export_cases --from data/controls-v1 --out data/controls-v1-live --prometheus-url http://127.0.0.1:9090
+$PY -m runtime.evaluate --data data/controls-v1-live --out results/controls-v1-live --rates 0 --seeds 0
+docker build -f runtime/Dockerfile -t corca:0.2.0 .
+$PY -m runtime.deploy --image corca:0.2.0 --calibration results/controls-v1-live/calibration.json
 ```
+
+The report's numbers (steps 1-4) use the lab's full telemetry; the deployed service
+(step 5) uses only what its source config queries. Do not mix their taus.
 
 ## Reading `results/final`
 

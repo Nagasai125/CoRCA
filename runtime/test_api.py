@@ -22,7 +22,11 @@ def test_authentication_and_health():
     with TestClient(create_app(TOKEN)) as client:
         assert client.get("/healthz").status_code == 200
         assert client.post("/diagnose", json=payload()).status_code == 401
-        assert client.get("/readyz", headers={"X-API-Key": TOKEN}).status_code == 200
+        assert client.get("/readyz").status_code == 503  # not ready without calibration
+        assert client.get("/openapi.json").status_code == 401
+    with TestClient(create_app(TOKEN, {"baro": 6.0})) as client:
+        assert client.get("/readyz").status_code == 200
+        assert "/v1/diagnoses" in client.get("/openapi.json", headers={"Authorization": f"Bearer {TOKEN}"}).json()["paths"]
 
 
 def test_invalid_windows_and_payload_limits():
@@ -164,3 +168,121 @@ def test_capacity_rejection_recovers_slot(monkeypatch):
             release.set()
         assert pending.result(timeout=3).status_code == 200
         assert client.post("/diagnose", json=payload(), headers={"X-API-Key": TOKEN}).status_code == 200
+
+
+# ---- Prometheus-backed jobs -------------------------------------------------------------
+import time as _time
+
+import pandas as pd
+import requests
+
+from runtime.api import Jobs
+from runtime.prometheus import fetch_window, validate_source
+
+T0 = 1_000_000
+SOURCE = validate_source({"prometheus_url": "http://prometheus:9090", "queries": {"cpu": "q"},
+                          "edges": [["frontend", "cartservice"]]})
+
+
+def fake_fetch(source, start, end):
+    rows = payload()["rows"]
+    return pd.DataFrame([[T0 + r[0], *r[1:]] for r in rows], columns=payload()["columns"])
+
+
+def wait_done(client, job_id, headers):
+    for _ in range(60):
+        job = client.get(f"/v1/diagnoses/{job_id}", headers=headers).json()
+        if job["status"] in ("done", "failed"):
+            return job
+        _time.sleep(.5)
+    raise AssertionError(f"job did not finish: {job}")
+
+
+def test_window_job_pulls_metrics_and_keeps_result(tmp_path):
+    headers = {"X-API-Key": TOKEN}
+    app = create_app(TOKEN, {"baro": 6.0}, source=SOURCE, db_path=tmp_path / "jobs.db", fetch=fake_fetch)
+    with TestClient(app) as client:
+        response = client.post("/v1/diagnoses", json={"inject_time": T0 + 30, "normal_seconds": 60}, headers=headers)
+        assert response.status_code == 202, response.text
+        job = wait_done(client, response.json()["id"], headers)
+        assert job["status"] == "done" and "cartservice" in job["result"]["root_causes"]
+        assert [j["id"] for j in client.get("/v1/diagnoses", headers=headers).json()] == [job["id"]]
+        assert client.post("/v1/diagnoses", json={"inject_time": T0, "method": "circa"},
+                           headers=headers).status_code == 422  # circa not calibrated
+        assert client.get("/v1/diagnoses/nope", headers=headers).status_code == 404
+
+
+def test_alertmanager_webhook_deduplicates_and_uses_bearer_auth(tmp_path):
+    app = create_app(TOKEN, {"baro": 6.0}, source=SOURCE, db_path=tmp_path / "jobs.db", fetch=fake_fetch)
+    hook = {"version": "4", "status": "firing", "groupKey": "{}:{alertname=\"HighLatency\"}", "receiver": "corca",
+            "alerts": [{"status": "firing", "labels": {"alertname": "HighLatency"},
+                        "startsAt": "2026-10-27T13:00:00.123456789Z"}]}
+    with TestClient(app) as client:
+        assert client.post("/v1/alerts", json=hook, headers={"Authorization": "Bearer wrong"}).status_code == 401
+        auth = {"Authorization": f"Bearer {TOKEN}"}
+        first = client.post("/v1/alerts", json=hook, headers=auth).json()
+        second = client.post("/v1/alerts", json=hook, headers=auth).json()
+        assert not first["duplicate"] and second["duplicate"] and first["id"] == second["id"]
+        assert first["inject_time"] == pd.Timestamp("2026-10-27T13:00:00Z").timestamp() - 60 + .123456
+        resolved = dict(hook, status="resolved", alerts=[dict(hook["alerts"][0], status="resolved")])
+        assert client.post("/v1/alerts", json=resolved, headers=auth).json()["accepted"] is False
+
+
+def test_prometheus_outage_is_retried_then_failed(tmp_path):
+    def down(*_):
+        raise requests.ConnectionError("refused")
+    jobs = Jobs(tmp_path / "jobs.db")
+    from runtime.api import MAX_ATTEMPTS, run_job
+    job_id = jobs.add("baro", T0, 60, 60)[0]["id"]
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        jobs.finish(job_id, "queued", ready_at=0)
+        job = jobs.claim()
+        assert job["attempts"] == attempt
+        run_job(job, jobs, SOURCE, {"baro": 6.0}, 20, down)
+    assert jobs.get(job_id)["status"] == "failed" and "Prometheus unavailable" in jobs.get(job_id)["error"]
+
+
+def test_jobs_interrupted_by_a_restart_are_requeued(tmp_path):
+    jobs = Jobs(tmp_path / "jobs.db")
+    job_id = jobs.add("baro", T0, 60, 60)[0]["id"]
+    assert jobs.claim()["id"] == job_id and jobs.get(job_id)["status"] == "running"
+    assert Jobs(tmp_path / "jobs.db").get(job_id)["status"] == "queued"
+
+
+def test_fetch_window_maps_series_and_rejects_ambiguous_queries(monkeypatch):
+    def series(*services, value="1"):
+        return {"status": "success", "data": {"result": [
+            {"metric": {"service": s}, "values": [[T0, value], [T0 + 5, "+Inf"]]} for s in services]}}
+    replies = []
+    monkeypatch.setattr(requests, "get", lambda *a, **k: type("R", (), {
+        "raise_for_status": lambda self: None, "json": lambda self: replies[0]})())
+    source = validate_source({"prometheus_url": "http://p", "queries": {"cpu": "q"}, "services": ["cartservice"]})
+    replies[:] = [series("cartservice", "loadgenerator")]
+    frame = fetch_window(source, T0, T0 + 10)
+    assert list(frame.columns) == ["time", "cartservice_cpu"]
+    assert frame["cartservice_cpu"].tolist()[0] == 1 and frame["cartservice_cpu"].isna().sum() == 2  # +Inf and gap
+    replies[:] = [series("cartservice", "cartservice")]
+    with pytest.raises(ValueError, match="aggregate"):
+        fetch_window(source, T0, T0 + 10)
+    with pytest.raises(ValueError):
+        validate_source({"prometheus_url": "ftp://p", "queries": {"cpu": "q"}})
+
+
+def test_export_cases_rewrites_metrics_from_the_source(tmp_path, monkeypatch):
+    from runtime.export_cases import export
+    case = tmp_path / "lab" / "cartservice_cpu" / "1"
+    case.mkdir(parents=True)
+    (case / "collection.json").write_text('{"status": "complete"}')
+    (case / "ground_truth.json").write_text('{"root_causes": ["cartservice"]}')
+    (case / "inject_time.txt").write_text(f"{T0 + 30}\n")
+    pd.DataFrame({"time": [T0, T0 + 59], "x_trace": [0, 1]}).to_csv(case / "metrics.csv", index=False)
+    windows = []
+    def fetch(source, start, end):
+        windows.append((start, end))
+        return fake_fetch(source, start, end)
+    monkeypatch.setattr('runtime.export_cases.fetch_window', fetch)
+    assert export(SOURCE, tmp_path / "lab", tmp_path / "live") == 1
+    assert windows == [(T0, T0 + 59)]
+    assert "cartservice_cpu" in pd.read_csv(tmp_path / "live/cartservice_cpu/1/metrics.csv").columns
+    with pytest.raises(FileExistsError):
+        export(SOURCE, tmp_path / "lab", tmp_path / "live")

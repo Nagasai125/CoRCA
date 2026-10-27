@@ -126,6 +126,70 @@ corca-summarize results/re1ob_holdout_drop25/runs.jsonl --calibration results/re
 The example paths above require a genuinely separate control/test split;
 they are not directories automatically created by the runner.
 
+## Running the diagnosis service
+
+The API diagnoses incidents from Prometheus by itself: give it a time, or point
+Alertmanager at it. Results are stored (SQLite) and survive restarts.
+
+```bash
+docker build -f runtime/Dockerfile -t corca:0.2.0 .
+python -m runtime.deploy --image corca:0.2.0 --calibration results/controls-v1/calibration.json
+# other clusters: --source my-source.json (see runtime/source.online-boutique.json)
+```
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /v1/diagnoses` `{"inject_time": <unix s>}` | key | queue a diagnosis; returns `202` + `id` |
+| `GET /v1/diagnoses/{id}`, `GET /v1/diagnoses?limit=20` | key | result / history |
+| `POST /v1/alerts` | key | Alertmanager webhook; repeats of one alert group are deduplicated |
+| `POST /diagnose` | key | synchronous, caller uploads the metric matrix (evaluation path) |
+| `GET /healthz`, `GET /readyz` | none | liveness; readiness = calibration loaded and job store usable |
+| `GET /openapi.json` | key | API schema |
+
+Auth is `X-API-Key: <token>` or `Authorization: Bearer <token>`; the token is in
+`runtime/.state/api-token`. Example:
+
+```bash
+TOKEN=$(cat runtime/.state/api-token)
+curl -s -X POST localhost:8000/v1/diagnoses -H "X-API-Key: $TOKEN" -H 'content-type: application/json' \
+     -d "{\"inject_time\": $(($(date +%s) - 180))}"
+curl -s localhost:8000/v1/diagnoses/<id> -H "X-API-Key: $TOKEN"   # status: queued|running|done|failed
+```
+
+A job waits until `inject_time + anomaly_seconds` (default 120 s) plus 15 s of
+scrape lag, then pulls `normal_seconds` (default 300 s) of history. A finished
+job's `result.status` is `diagnosed`, `partial_unexplained`, `partial_timeout`,
+`insufficient_evidence` or `no_significant_anomaly`. Prometheus outages are
+retried 3 times, 30 s apart; other failures are reported in `error`.
+
+Alertmanager receiver:
+
+```yaml
+receivers:
+  - name: corca
+    webhook_configs:
+      - url: http://corca-api.corca.svc:8000/v1/alerts
+        send_resolved: false
+        http_config:
+          authorization: {credentials_file: /etc/alertmanager/corca-token}
+```
+
+The diagnosis window starts `alert_lead_seconds` (default 60) before the alert's
+`startsAt`, because alerts fire after their `for:` delay.
+
+**Source config.** `queries` maps a metric kind to PromQL returning one series per
+service, labelled with `service_label`. Use kinds `cpu`, `mem` (resource metrics
+are kept as candidates during explain-away), `latency-90`, `error`, `workload`.
+`services` filters which services count; `edges` (`[caller, callee]`) is the
+call graph, defaulting to Online Boutique's. Service names cannot contain `_`.
+
+**Operating limits.** The bundled Online Boutique config has CPU and memory only;
+the lab's latency/error features come from trace files, which are not in
+Prometheus. Without latency queries (OpenTelemetry spanmetrics, a service mesh)
+delay faults are diagnosed only through their resource side effects. Calibrate
+tau on controls collected with the same source config you deploy. One replica only
+(SQLite on a ReadWriteOnce volume).
+
 ## Layout
 
 | Path | What |

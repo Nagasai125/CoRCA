@@ -1,0 +1,13 @@
+{
+  "prometheus_url": "http://prometheus.corca.svc:9090",
+  "service_label": "service",
+  "step": 5,
+  "alert_lead_seconds": 60,
+  "alert_method": "baro",
+  "services": ["adservice", "cartservice", "checkoutservice", "currencyservice", "emailservice", "frontend",
+               "paymentservice", "productcatalogservice", "recommendationservice", "redis-cart", "shippingservice"],
+  "queries": {
+    "cpu": "sum by(service)(label_replace(irate(container_cpu_usage_seconds_total{namespace=\"corca\",container!=\"\",container!=\"POD\"}[60s]), \"service\", \"$1\", \"pod\", \"(.+)-[a-z0-9]+-[a-z0-9]+\"))",
+    "mem": "sum by(service)(label_replace(container_memory_working_set_bytes{namespace=\"corca\",container!=\"\",container!=\"POD\"}, \"service\", \"$1\", \"pod\", \"(.+)-[a-z0-9]+-[a-z0-9]+\"))"
+  }
+}

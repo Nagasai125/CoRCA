@@ -4,7 +4,8 @@ metadata:
   name: corca-api
   namespace: corca
 spec:
-  replicas: 1
+  replicas: 1                # SQLite job store: exactly one writer
+  strategy: {type: Recreate} # the ReadWriteOnce volume cannot be shared during a rollout
   selector:
     matchLabels: {app: corca-api}
   template:
@@ -15,15 +16,17 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001}
       containers:
         - name: api
-          image: corca:0.1.0
+          image: corca:0.2.0
           imagePullPolicy: Never
           env:
             - {name: CORCA_TOKEN_FILE, value: /run/secrets/corca/api-token}
             - {name: CORCA_CALIBRATION, value: /etc/corca/calibration.json}
+            - {name: CORCA_SOURCE, value: /etc/corca/source.json}
+            - {name: CORCA_DB, value: /var/lib/corca/corca.db}
             - {name: MPLCONFIGDIR, value: /tmp/matplotlib}
           ports: [{containerPort: 8000}]
           readinessProbe:
-            httpGet: {path: /healthz, port: 8000}
+            httpGet: {path: /readyz, port: 8000}
           livenessProbe:
             httpGet: {path: /healthz, port: 8000}
             initialDelaySeconds: 10
@@ -39,6 +42,7 @@ spec:
             - {name: token, mountPath: /run/secrets/corca, readOnly: true}
             - {name: calibration, mountPath: /etc/corca, readOnly: true}
             - {name: tmp, mountPath: /tmp}
+            - {name: data, mountPath: /var/lib/corca}
       volumes:
         - name: token
           secret: {secretName: corca-api, defaultMode: 0440}
@@ -46,6 +50,8 @@ spec:
           configMap: {name: corca-calibration}
         - name: tmp
           emptyDir: {sizeLimit: 256Mi}
+        - name: data
+          persistentVolumeClaim: {claimName: corca-api-data}
 ---
 apiVersion: v1
 kind: Service
@@ -55,3 +61,13 @@ metadata:
 spec:
   selector: {app: corca-api}
   ports: [{port: 8000, targetPort: 8000}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: corca-api-data
+  namespace: corca
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 1Gi}

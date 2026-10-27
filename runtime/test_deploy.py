@@ -23,6 +23,8 @@ def test_deploy_loads_and_applies_the_requested_image(monkeypatch, tmp_path):
     monkeypatch.setattr(deploy, "kube", kube)
     deploy.main()
     assert loaded[0][1:] == ["load", "docker-image", "corca-api:policy-v1", "--name", "corca-lab"]
+    config = next(p for p in applied if p["kind"] == "ConfigMap")["data"]
+    assert json.loads(config["source.json"])["prometheus_url"].startswith("http")
     objects = applied[-1]["items"]
     assert objects[0]["spec"]["template"]["spec"]["containers"][0]["image"] == "corca-api:policy-v1"
     assert objects[1]["metadata"]["name"] == "corca-api"
