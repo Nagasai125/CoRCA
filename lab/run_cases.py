@@ -186,9 +186,31 @@ def main():
     if manifest.exists() and json.loads(manifest.read_text()) != config:
         parser.error("collection configuration or source changed; use a new --out folder")
     manifest.write_text(json.dumps(config, indent=2))
+    failed = []
     for scenario in scenarios:
         for repeat in range(1, args.repeats + 1):
-            run_case(scenario, repeat, output, args.normal_seconds, args.fault_seconds)
+            for attempt in (1, 2):  # one retry per incident
+                try:
+                    run_case(scenario, repeat, output, args.normal_seconds, args.fault_seconds)
+                    break
+                except KeyboardInterrupt:
+                    raise
+                except Exception as exc:
+                    print(f"FAILED {scenario['name']}/{repeat} attempt {attempt}: {exc!r}", flush=True)
+                    # Move the rejected incident out of the dataset (kept for the report), so it can be re-run.
+                    folder = output / scenario["name"] / str(repeat)
+                    if folder.exists():
+                        dest = output.parent / (output.name + "-rejected") / scenario["name"] / f"{repeat}-attempt{attempt}-{int(time.time())}"
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        folder.rename(dest)
+                    # If chaos could not be cleaned up, every later case would fail: stop instead.
+                    if json.loads(kube("-n", "corca", "get", "stresschaos,networkchaos", "-o", "json"))["items"]:
+                        raise SystemExit("chaos experiments still active after a failure; stopping") from exc
+                    if attempt == 2:
+                        failed.append(f"{scenario['name']}/{repeat}")
+                    else:
+                        time.sleep(120)  # let restarted pods settle before retrying
+    print(f"Done. {len(failed)} incident(s) failed twice: {failed}", flush=True)
 
 
 if __name__ == "__main__":

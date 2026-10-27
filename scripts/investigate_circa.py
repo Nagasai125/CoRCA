@@ -5,6 +5,7 @@ Development only: the candidate is not registered as a production RCA method.
 import argparse
 import json
 import math
+import os
 import random
 import time
 from importlib import metadata
@@ -24,6 +25,7 @@ from corca.metrics import exact_match, set_prf
 from corca.topology import call_graph
 from scripts.experiment import digest_file
 from scripts.summarize import calibrate, predicted_set, validate_calibration_split
+from scripts.structural_circa import STRUCTURAL_POLICIES, StrictANMRegressor, rank_structural
 
 
 POLICIES = (FEATURE_POLICY, "experimental-rht-residual-floor-1pct-v1")
@@ -51,8 +53,8 @@ class FloorRegressor(ANMRegressor):
 
 
 class TraceScorer(RHTScorer):
-    def __init__(self, floor=False):
-        super().__init__()
+    def __init__(self, floor=False, **kwargs):
+        super().__init__(**kwargs)
         self.floor, self.details = floor, []
 
     def score_node(self, graph, series, node, data):
@@ -109,8 +111,11 @@ def analyze(folder, policy, dataset):
     traces = []
 
     def rank(frame, inject_time):
-        scorer = TraceScorer(floor=policy == POLICIES[1])
-        metrics = rank_circa(frame, inject_time, dataset, scorer=scorer)
+        structural = policy in STRUCTURAL_POLICIES
+        scorer = TraceScorer(regressor=StrictANMRegressor()) if structural else TraceScorer(floor=policy == POLICIES[1])
+        metrics = (rank_structural(frame, inject_time, dataset, graph,
+                                   adjustment=policy == STRUCTURAL_POLICIES[1], scorer=scorer)
+                   if structural else rank_circa(frame, inject_time, dataset, scorer=scorer))
         traces.append({"ranked_services": services_from_metrics(metrics),
                        "metrics": sorted(scorer.details, key=lambda x: (-x["score"], x["metric"]))})
         return metrics
@@ -155,6 +160,7 @@ def main():
     parser.add_argument("--case", nargs="+", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--dataset", choices=("re1-ob", "re2-ob"), default="re2-ob")
+    parser.add_argument("--policies", nargs="+", choices=POLICIES + STRUCTURAL_POLICIES, default=POLICIES)
     parser.add_argument("--timeout", type=float, default=60, help="seconds for one whole three-round case")
     args = parser.parse_args()
     if not math.isfinite(args.timeout) or args.timeout <= 0:
@@ -177,9 +183,12 @@ def main():
         parser.error(str(exc))
     source = [p for base in ("corca", "scripts", "runtime") for p in Path(base).glob("*.py")]
     package = metadata.distribution("RCAEval")
-    manifest = {"scope": "development_only_not_held_out", "policies": POLICIES,
+    policies = list(dict.fromkeys(args.policies))
+    manifest = {"scope": "development_only_not_held_out", "policies": policies,
                 "dataset": args.dataset, "base_feature_policy": FEATURE_POLICY,
                 "controls": list(map(str, controls)), "cases": list(map(str, cases)), "timeout": args.timeout,
+                "environment": {key: os.environ.get(key) for key in
+                                ("PYTHONHASHSEED", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS")},
                 "inputs": hashes, "source": {str(p): digest_file(p) for p in source},
                 "ranker_sources": {str(p): digest_file(package.locate_file(p)) for p in package.files or []
                                    if str(p).startswith("RCAEval/") and str(p).endswith(".py")},
@@ -187,7 +196,7 @@ def main():
     (args.out / "experiment.json").write_text(json.dumps(manifest, indent=2))
     records = []
     with (args.out / "diagnoses.jsonl").open("x") as stream:
-        for policy in POLICIES:
+        for policy in policies:
             for folder in folders:
                 record = run(folder, policy, args.timeout, args.dataset)
                 record["split"] = "control" if folder in controls else "development"
@@ -198,7 +207,7 @@ def main():
     if input_hashes(folders) != hashes or any(digest_file(p) != v for p, v in manifest["source"].items()):
         parser.error("inputs or code changed during analysis; raw records preserved, comparison invalid")
     taus, rows, unavailable = {}, [], {}
-    for policy in POLICIES:
+    for policy in policies:
         try:
             taus[policy] = calibrate([r for r in records if r["method"] == policy and r["split"] == "control"], .9)
         except ValueError as exc:
@@ -217,6 +226,7 @@ def main():
         "unavailable": unavailable, "comparisons": rows,
         "limitations": ["existing incidents used for development, not untouched test data",
                         "noise floor is a heuristic and can hide real sub-percent memory faults",
+                        "structural mapping and linear RHT are experimental, not a full original CIRCA reproduction",
                         "candidate is not registered in the API or production evaluator"]}, indent=2))
     print(pd.DataFrame(rows).to_string(index=False))
 

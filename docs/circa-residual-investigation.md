@@ -42,6 +42,51 @@ existing separate local single-fault control. The candidate and existing
 adapter obtain the same tau within each dataset. Neither comparison justifies
 a release claim, and the public regression rejects promotion of this candidate.
 
+## Full Predeclared Public Screen
+
+The five public incidents above are a subset. `structural-circa-plan.md`
+predeclares 98 RE1-OB cases: repeats 1 through 4 of all 25 service/fault
+combinations, excluding the two `adservice_cpu` controls that supply tau.
+Repeat 5 was not inspected. Both policies received the same frozen tau 4.967.
+
+| Policy | Mean F1 | Exact sets | Top-1 service |
+| --- | ---: | ---: | ---: |
+| `pc-rht-observed-no-workload-v1` | 0.532 | 0.204 | 0.561 |
+| `experimental-rht-residual-floor-1pct-v1` | 0.500 | 0.153 | 0.520 |
+
+The candidate reduces all three screen quantities, so the predeclared rule
+rejects it on the full set, not only on the five-incident subset. By fault:
+
+| Fault | Existing F1 | Candidate F1 | Existing exact | Candidate exact |
+| --- | ---: | ---: | ---: | ---: |
+| cpu | 0.824 | 0.696 | 0.647 | 0.412 |
+| mem | 0.658 | 0.592 | 0.300 | 0.200 |
+| disk | 0.458 | 0.433 | 0.000 | 0.000 |
+| loss | 0.392 | 0.392 | 0.100 | 0.100 |
+| delay | 0.400 | 0.442 | 0.050 | 0.100 |
+
+A residual floor can only raise sigma, so it can only lower a score. It helps
+when the suppressed stream is a false suspect, as with the lab's 0.08% memory
+drift, and hurts when the true root is itself quiet. CPU faults are the
+worst-affected class here, which is the same class the floor repairs on the
+local incident. One relative constant does not separate those two situations.
+This is a development screen on single-fault public data; it does not measure
+concurrent-fault behaviour, and it does not establish that some other floor
+derived from measurement resolution would fail.
+
+`RE1-OB/checkoutservice_cpu/4` returned `error` under both policies. It is a
+pre-existing failure unrelated to the candidate and is still uninvestigated.
+
+Artifacts: `results/floor-public-development-v1/` holds `comparison.csv`,
+`report.json`, `diagnoses.jsonl` and `experiment.json`.
+
+```bash
+PYTHONPATH=. .venv/bin/python -m scripts.investigate_circa --dataset re1-ob \
+  --control RE1-OB/adservice_cpu/1 RE1-OB/adservice_cpu/2 \
+  --case $(ls -d RE1-OB/*/[1-4] | grep -v -E 'adservice_cpu/[12]$') \
+  --out results/floor-public-development-v1 --timeout 60
+```
+
 ## Evidence And Commands
 
 Saved artifacts:

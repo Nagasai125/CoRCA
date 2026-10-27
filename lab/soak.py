@@ -42,47 +42,65 @@ def check_sample(sample, first, max_fraction):
         raise ValueError("currencyservice memory exceeded the predeclared headroom gate")
 
 
+def check_clock(started, wall_started, last, interval):
+    now = time.monotonic()
+    elapsed = now - started
+    if now - last > interval + 30 or abs(time.time() - wall_started - elapsed) > 30:
+        raise ValueError("sampling interrupted by host suspension, overload, or a clock jump")
+    return elapsed
+
+
 def run(output, seconds, interval, max_fraction):
     output.mkdir(parents=True, exist_ok=False)
     first, samples = None, []
-    started, last = time.time(), time.time()
+    wall_started = time.time()
+    started = last = time.monotonic()
+    measured = 0.0
     policy = LAB / "kustomization.yaml"
     policy_hash = hashlib.sha256(policy.read_bytes()).hexdigest()
     report = {"status": "running", "scope": "bounded_healthy_soak_not_production_validation",
               "requested_seconds": seconds, "interval_seconds": interval,
-              "max_memory_fraction": max_fraction, "started_at": started,
+              "max_memory_fraction": max_fraction, "started_at": wall_started,
               "kustomization_sha256": policy_hash}
     path = output / "report.json"
     path.write_text(json.dumps(report, indent=2) + "\n")
     try:
         with (output / "samples.jsonl").open("x") as stream:
             while True:
-                if time.time() - last > interval + 30:
-                    raise ValueError("sampling interrupted by host suspension, overload, or a clock jump")
+                check_clock(started, wall_started, last, interval)
                 sample = snapshot()
+                measured = check_clock(started, wall_started, last, interval)
                 first = sample if first is None else first
                 check_sample(sample, first, max_fraction)
                 samples.append(sample)
                 stream.write(json.dumps(sample) + "\n")
                 stream.flush()
-                last = time.time()
-                if last - started >= seconds:
+                last = time.monotonic()
+                report.update(measured_seconds=measured, samples=len(samples), first=first, last=sample,
+                              max_memory_bytes=max(s["memory_bytes"] for s in samples))
+                path.write_text(json.dumps(report, indent=2) + "\n")
+                print(f"Soak {measured:.0f}/{seconds:g}s; memory {sample['memory_bytes'] / 1024**2:.1f}"
+                      f"/{sample['limit_bytes'] / 1024**2:.0f} MiB; restarts {sample['restarts']}", flush=True)
+                if measured >= seconds:
                     break
-                time.sleep(min(interval, seconds - (last - started)))
+                time.sleep(min(interval, seconds - measured))
         if hashlib.sha256(policy.read_bytes()).hexdigest() != policy_hash:
             raise ValueError("lab configuration changed during the soak")
-        traces = trace_snapshot(started, time.time())
-        count = sum(service == "currencyservice" for service, _ in spans_from_records(traces))
+        traces = trace_snapshot(wall_started, samples[-1]["time"])
+        count = sum(service == "currencyservice" and span.get("kind") in (2, "SPAN_KIND_SERVER")
+                    and "health" not in str(span.get("name", "")).lower()
+                    and span.get("status", {}).get("code") not in (2, "STATUS_CODE_ERROR")
+                    for service, span in spans_from_records(traces))
         if not count:
-            raise ValueError("no currencyservice trace spans observed; active traced workload is required")
+            raise ValueError("no successful non-health currencyservice server spans; active traced workload is required")
         report.update(status="passed", currencyservice_spans=count)
     except BaseException as exc:
         report.update(status="failed", error=repr(exc))
         raise
     finally:
-        elapsed = time.time() - started
-        report.update(elapsed_seconds=elapsed, samples=len(samples),
-                      long_soak_gate_met=report["status"] == "passed" and seconds >= 3600,
+        elapsed = time.monotonic() - started
+        report.update(elapsed_seconds=elapsed, measured_seconds=measured, samples=len(samples),
+                      long_soak_gate_met=report["status"] == "passed" and min(seconds, measured) >= 3600,
                       max_memory_bytes=max((s["memory_bytes"] for s in samples), default=None),
                       first=first, last=samples[-1] if samples else None)
         path.write_text(json.dumps(report, indent=2) + "\n")

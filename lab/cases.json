@@ -5,5 +5,6 @@
   {"name": "currencyservice_cpu+adservice_cpu", "roots": [{"service": "currencyservice", "fault": "cpu"}, {"service": "adservice", "fault": "cpu"}]},
   {"name": "currencyservice_cpu+checkoutservice_cpu", "roots": [{"service": "currencyservice", "fault": "cpu"}, {"service": "checkoutservice", "fault": "cpu"}]},
   {"name": "currencyservice_delay+adservice_cpu", "roots": [{"service": "currencyservice", "fault": "delay"}, {"service": "adservice", "fault": "cpu"}]},
+  {"name": "checkoutservice_delay+currencyservice_cpu", "roots": [{"service": "checkoutservice", "fault": "delay"}, {"service": "currencyservice", "fault": "cpu"}]},
   {"name": "currencyservice_cpu+checkoutservice_cpu+adservice_cpu", "roots": [{"service": "currencyservice", "fault": "cpu"}, {"service": "checkoutservice", "fault": "cpu"}, {"service": "adservice", "fault": "cpu"}]}
 ]
