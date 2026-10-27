@@ -28,6 +28,7 @@ $PY -m scripts.summarize results/re1ob-final/runs.jsonl
 
 # 4. Final tables for the report.
 $PY -m scripts.report results/re1ob-final results/heldout-v1 --out results/final
+$PY -m scripts.plots results/final   # fig_f1, fig_dropout, fig_sensitivity (.png + .pdf)
 
 # 5. Deploy the service with a tau fitted on the metrics it will see (Prometheus cpu/mem).
 #    Run right after step 1: lab Prometheus loses history when its pod restarts.
