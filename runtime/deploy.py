@@ -10,7 +10,7 @@ from pathlib import Path
 from lab.setup import ROOT, TOOLS
 from lab.telemetry import kube
 from runtime.api import calibration_thresholds
-from runtime.prometheus import load_source
+from runtime.telemetry import load_source
 
 
 def main():

@@ -5,11 +5,13 @@ Every query must return one series per service, labelled with `service_label`.
 """
 import json
 import math
+import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import requests
+from corca.topology import metric_column
 
 
 def validate_source(source):
@@ -51,10 +53,20 @@ def fetch_window(source, start, end):
     if len(grid) < 2:
         raise ValueError("diagnosis window is empty")
     data = {"time": grid}
+    auth = {}
+    if source.get("token_env"):
+        token = os.getenv(source["token_env"], "")
+        if not token:
+            raise ValueError(f"Set {source['token_env']} on the CoRCA server")
+        auth = ({"auth": (source["username"], token)} if source.get("username")
+                else {"headers": {"Authorization": "Bearer " + token}})
     for kind, query in source["queries"].items():
         response = requests.get(source["prometheus_url"].rstrip("/") + "/api/v1/query_range", timeout=30,
-                                params={"query": query, "start": int(grid[0]), "end": int(grid[-1]), "step": step})
+                                params={"query": query, "start": int(grid[0]), "end": int(grid[-1]), "step": step},
+                                allow_redirects=False, **auth)
         response.raise_for_status()
+        if 300 <= getattr(response, "status_code", 200) < 400:
+            raise ValueError("Configure the final Prometheus endpoint; redirects are disabled")
         body = response.json()
         if body.get("status") != "success":
             raise RuntimeError(f"Prometheus query for {kind!r} failed: {body.get('error')}")
@@ -62,9 +74,7 @@ def fetch_window(source, start, end):
             service = series["metric"].get(label)
             if not service or (allowed and service not in allowed):
                 continue
-            if "_" in service:
-                raise ValueError(f"service name {service!r} must not contain '_' (column naming is service_kind)")
-            column = f"{service}_{kind}"
+            column = metric_column(service, kind, legacy_aliases="edges" not in source)
             if column in data:
                 raise ValueError(f"{kind!r} query returned several series for {service}; aggregate by {label}")
             values = pd.Series({int(float(t)): float(v) for t, v in series["values"]}, dtype=float)

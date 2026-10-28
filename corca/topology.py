@@ -9,6 +9,7 @@ callers (`checkoutservice`, `frontend`, ...) look slow too. So the services a
 root cause can "explain" are the root itself plus all its transitive callers.
 """
 import networkx as nx
+from urllib.parse import unquote
 
 # caller -> callees
 OB_CALLS = {
@@ -43,11 +44,25 @@ def call_graph(calls=OB_CALLS) -> nx.DiGraph:
     return g
 
 
+def metric_column(service: str, kind: str, *, legacy_aliases: bool = False) -> str:
+    """Encode live IDs separately from the aliases used by legacy research datasets."""
+    encoded = service.replace("%", "%25").replace("_", "%5F")
+    if not legacy_aliases or service.startswith("~"):
+        encoded = "~" + encoded
+    return encoded + "_" + kind
+
+
+def raw_service_of(col: str) -> str:
+    encoded = col.split("_", 1)[0]
+    return unquote(encoded[1:] if encoded.startswith("~") else encoded)
+
+
 def service_of(col: str) -> str:
-    """Map an RCAEval metric column (e.g. 'cartservice_latency-90') to its service.
-    Same rule RCAEval's main.py uses for service-level scoring."""
-    s = col.split("_")[0].replace("-db", "")
-    return _ALIASES.get(s, s)
+    """Decode exact live service IDs, retaining RCAEval aliases for legacy columns."""
+    if col.startswith("~"):
+        return raw_service_of(col)
+    service = raw_service_of(col).replace("-db", "")
+    return _ALIASES.get(service, service)
 
 
 def metric_kind(col: str) -> str:

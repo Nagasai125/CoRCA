@@ -1,8 +1,8 @@
-"""Re-export collected lab incidents through a Prometheus source config.
+"""Re-export collected lab incidents through a telemetry source config.
 
 The deployed service sees only what its source config queries, so its tau must be
 calibrated on those same metrics. This rewrites each complete incident's metrics.csv
-from Prometheus (same window, same labels) so runtime.evaluate can calibrate on it:
+from the configured provider (same window, same labels) so runtime.evaluate can calibrate on it:
 
     kubectl -n corca port-forward service/prometheus 9090:9090 &
     python -m runtime.export_cases --from data/controls-v1 --out data/controls-v1-live \\
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from runtime.prometheus import fetch_window, load_source
+from runtime.telemetry import fetch_window, load_source
 
 
 def export(source, origin, out):
@@ -51,6 +51,8 @@ def main():
     args = parser.parse_args()
     source = load_source(args.source)
     if args.prometheus_url:
+        if source.get("provider", "prometheus") not in ("prometheus", "grafana"):
+            raise ValueError("--prometheus-url applies only to Prometheus-compatible sources")
         source["prometheus_url"] = args.prometheus_url
     print(f"exported {export(source, args.origin, args.out)} incidents to {args.out}")
 

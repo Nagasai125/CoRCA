@@ -15,3 +15,8 @@ lab/.state/
 lab/vendor/
 tmp/
 runtime/.state/
+
+# Project documents stay local (not published)
+*.pdf
+*.docx
+docs/readiness/

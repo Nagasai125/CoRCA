@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CoRCA</title>
-<meta name="description" content="CoRCA finds every root cause when several microservices fail at the same time.">
+<meta name="description" content="Investigate concurrent microservice faults with telemetry-backed root-cause analysis.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #f6f8fb; --surface: #ffffff; --ink: #14213d; --ink-2: #4a5468; --line: #d9dfe8;
-    --fault: #d93a3f; --fault-tint: #fbe3e3; --root: #2a78d6; --root-tint: #dbe9fa;
+    --fault: #d93a3f; --fault-tint: #fbe3e3; --root: #195fba; --root-tint: #dbe9fa;
     --quiet: #eef1f5; --quiet-ink: #8a94a6;
     --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
     --code-bg: #14213d; --code-ink: #e8edf5;
@@ -32,14 +32,14 @@
   html { scroll-behavior: smooth; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font: 17px/1.6 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
+    font: 17px/1.6 "Google Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; font-optical-sizing: auto;
   }
   a { color: var(--root); }
   a:focus-visible, button:focus-visible, [tabindex]:focus-visible, summary:focus-visible {
     outline: 3px solid var(--root); outline-offset: 3px; border-radius: 4px;
   }
-  code, pre { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: .86em; }
+  code, pre { font-family: ui-monospace, Menlo, monospace; font-size: .86em; }
   .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
 
   /* top bar */
@@ -75,7 +75,7 @@
   .node text { fill: var(--ink-2); font-size: 13px; text-anchor: middle; transition: fill .5s; }
   .node .badge { opacity: 0; transition: opacity .4s; }
   .node .badge rect { fill: var(--root); }
-  .node .badge text { fill: #fff; font-size: 11px; font-weight: 600; }
+  .node .badge text { fill: var(--surface); font-size: 11px; font-weight: 600; }
   .node[data-state="anomalous"] circle { fill: var(--fault); stroke: var(--fault); animation: pulse 1.4s ease-in-out infinite; }
   .node[data-state="symptom"] circle { fill: var(--fault-tint); stroke: var(--fault); }
   .node[data-state="root"] circle { fill: var(--root); stroke: var(--root); }
@@ -172,6 +172,32 @@
     html { scroll-behavior: auto; }
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
+
+  :root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --motion-fast: 140ms; --motion-enter: 200ms; }
+  .btn, .replay { transition: transform var(--motion-fast) var(--ease-out), background-color var(--motion-fast) ease, border-color var(--motion-fast) ease; }
+  .btn:active:not(:disabled):not(:focus-visible), .replay:active:not(:focus-visible) { transform: scale(.98); }
+  @media (hover: hover) and (pointer: fine) {
+    .btn:not(:disabled):hover, .replay:hover { transform: translateY(-1px); }
+    .btn:active:not(:disabled):not(:focus-visible), .replay:active:not(:focus-visible) { transform: scale(.98); }
+  }
+
+  .hero .wrap > div, .hero .stage { transition: opacity 400ms var(--ease-out), transform 400ms var(--ease-out); }
+  .hero .stage { box-shadow: 0 16px 48px -28px rgba(20,33,61,.3); }
+  @starting-style {
+    body:not([data-input="keyboard"]) .hero .wrap > div,
+    body:not([data-input="keyboard"]) .hero .stage { opacity: 0; transform: translateY(12px); }
+  }
+
+  /* Keyboard commands remain immediate, including transitions already in flight. */
+  html:has(body[data-input="keyboard"]) { scroll-behavior: auto; }
+  body[data-input="keyboard"] *, body[data-input="keyboard"] *::before, body[data-input="keyboard"] *::after {
+    transition: none !important; animation: none !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    html { scroll-behavior: auto; }
+  }
+
 </style>
 </head>
 <body>
@@ -194,10 +220,10 @@
   <section class="hero" aria-labelledby="hero-title">
     <div class="wrap">
       <div>
-        <h1 id="hero-title">When several services fail at once, find every root cause.</h1>
-        <p class="lede">CoRCA reads your Prometheus metrics when an alert fires and names the services that actually broke, not just the loudest one. Then it sets aside the symptoms they explain and keeps looking.</p>
+        <h1 id="hero-title">When services fail together, investigate the root causes.</h1>
+        <p class="lede">Connect service metrics from Prometheus, Grafana Cloud, Datadog, Dynatrace, or New Relic. CoRCA ranks candidate root causes, explains their symptoms, and looks for faults that remain.</p>
         <div class="actions">
-          <a class="btn primary" href="#connect">Connect your cluster</a>
+          <a class="btn primary" href="/app?view=integrations">Connect your workspace</a>
           <a class="btn secondary" href="#how">See how it works</a>
         </div>
       </div>
@@ -259,38 +285,24 @@
     <div class="wrap connect">
       <div>
         <h2 id="connect-title">Connect it in three steps</h2>
-        <p class="intro" style="margin:0">CoRCA runs as one small service next to Prometheus. It needs read access to your metrics and nothing else.</p>
+        <p class="intro" style="margin:0">Connect your existing monitoring platform once. Then review metric coverage and dependencies for the services you want to investigate.</p>
       </div>
       <ol>
-        <li>
-          <div><h3>Deploy the service</h3><p>Ship it with a calibration fitted on a few single-fault drills from your own cluster.</p></div>
-          <pre><code>python -m runtime.deploy \
-  --image corca:0.2.0 \
-  --calibration calibration.json</code></pre>
-        </li>
-        <li>
-          <div><h3>Send it your alerts</h3><p>Add CoRCA as an Alertmanager receiver. Repeated notifications for one alert start one diagnosis.</p></div>
-          <pre><code>receivers:
-  - name: corca
-    webhook_configs:
-      - url: http://corca-api.corca.svc:8000/v1/alerts
-        http_config:
-          authorization:
-            credentials_file: /etc/alertmanager/corca-token</code></pre>
-        </li>
-        <li>
-          <div><h3>Read the diagnosis</h3><p>Results arrive about two minutes after the alert and are kept for later review.</p></div>
-          <pre><code>curl -H "X-API-Key: $TOKEN" \
-  http://corca-api.corca.svc:8000/v1/diagnoses?limit=1
+        <li><div><h3>Connect your telemetry</h3><p>Choose a provider and its query endpoint in Integrations. An administrator configures read credentials on the CoRCA server.</p></div><pre><code>Prometheus · Grafana Cloud Metrics
+Datadog · Dynatrace · New Relic
 
-<span class="c"># "status": "done",
-# "result": {
-#   "status": "diagnosed",
-#   "root_causes": ["adservice", "currencyservice"]
-# }</span></code></pre>
-        </li>
+<span class="c"># One active source per deployment</span></code></pre></li>
+        <li><div><h3>Confirm your services</h3><p>Discover reporting services, check missing metrics, and select your scope. Define who calls whom using the service IDs returned by your queries.</p></div><pre><code>frontend → checkout → payments
+
+<span class="c"># Review real service dependencies
+# CoRCA does not infer them from metric names</span></code></pre></li>
+        <li><div><h3>Calibrate and investigate</h3><p>Load calibration fitted to the same telemetry and dependencies. Choose an incident time, review the evidence, and optionally route Alertmanager notifications to start diagnoses.</p></div><pre><code>Metric coverage → dependencies
+Calibration → diagnosis → evidence
+
+<span class="c"># Share a diagnosis link or export the result</span></code></pre></li>
       </ol>
     </div>
+    <div class="wrap" style="margin-top:32px"><a class="btn primary" href="/app?view=integrations">Open integration setup →</a><p class="intro" style="margin-top:16px">Self-hosted beta for trusted teams. Access is shared through a service API key; individual accounts, SSO, and role enforcement are not available.</p></div>
   </section>
 </main>
 
@@ -303,6 +315,8 @@
 
 <script>
 (() => {
+  document.addEventListener("pointerdown", () => { document.body.dataset.input = "pointer"; }, {passive: true});
+  document.addEventListener("keydown", () => { document.body.dataset.input = "keyboard"; });
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ---------- explain-away replay: Online Boutique topology (corca/topology.py) ---------- */

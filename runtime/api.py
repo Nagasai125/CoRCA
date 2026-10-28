@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import math
@@ -15,6 +16,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 import networkx as nx
 import numpy as np
@@ -29,8 +31,8 @@ from corca import corca
 from corca.base import anomaly_scores
 from corca.circa import FEATURE_POLICY, InsufficientEvidence
 from corca.corca import STOPPING_POLICY
-from corca.topology import service_of
-from runtime.prometheus import fetch_window, load_source
+from corca.topology import service_of, raw_service_of
+from runtime.telemetry import fetch_window, load_source, validate_source, discover_services
 
 
 class Incident(BaseModel):
@@ -70,6 +72,25 @@ class WindowRequest(BaseModel):
     method: Literal["baro", "circa"] = "baro"
 
 
+class ConnectionSetup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: dict
+    revision: str | None = None
+
+
+class TopologySetup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: str
+    services: list[str] = Field(min_length=1, max_length=100)
+    edges: list[tuple[str, str]] = Field(max_length=1000)
+
+
+class CalibrationSetup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: str
+    calibration: dict
+
+
 class AlertmanagerAlert(BaseModel):
     status: str
     startsAt: datetime
@@ -100,6 +121,9 @@ class Jobs:
                 id TEXT PRIMARY KEY, dedupe TEXT UNIQUE, method TEXT NOT NULL, inject_time REAL NOT NULL,
                 start REAL NOT NULL, end REAL NOT NULL, ready_at REAL NOT NULL, status TEXT NOT NULL,
                 attempts INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL, result TEXT, error TEXT)""")
+            if "context" not in {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}:
+                db.execute("ALTER TABLE jobs ADD COLUMN context TEXT")
+            db.execute("CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)")
             db.execute("UPDATE jobs SET status = 'queued' WHERE status = 'running'")  # crashed mid-run
 
     @contextlib.contextmanager
@@ -112,15 +136,31 @@ class Jobs:
         finally:
             db.close()
 
-    def add(self, method, inject_time, normal_seconds, anomaly_seconds, dedupe=None):
+    def connection(self):
+        with self._db() as db:
+            row = db.execute("SELECT value FROM settings WHERE name = 'connection'").fetchone()
+        return json.loads(row["value"]) if row else None
+
+    def bind_legacy_jobs(self, context):
+        with self._db() as db:
+            db.execute("UPDATE jobs SET context=? WHERE context IS NULL AND status IN ('queued','running')",
+                       (json.dumps(context),))
+
+    def save_connection(self, context):
+        context = {**context, "stopping_policy": STOPPING_POLICY, "feature_policy": FEATURE_POLICY}
+        with self._db() as db:
+            db.execute("INSERT INTO settings(name,value) VALUES ('connection',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+                       (json.dumps(context),))
+
+    def add(self, method, inject_time, normal_seconds, anomaly_seconds, dedupe=None, context=None):
         end = inject_time + anomaly_seconds
         job_id = uuid.uuid4().hex
         with self._db() as db:
             try:
-                db.execute("INSERT INTO jobs (id, dedupe, method, inject_time, start, end, ready_at, status, created)"
-                           " VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?)",
+                db.execute("INSERT INTO jobs (id, dedupe, method, inject_time, start, end, ready_at, status, created, context)"
+                           " VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)",
                            (job_id, dedupe, method, inject_time, inject_time - normal_seconds, end,
-                            end + SCRAPE_LAG, time.time()))
+                            end + SCRAPE_LAG, time.time(), json.dumps(context) if context else None))
             except sqlite3.IntegrityError:  # Alertmanager re-sent the same notification
                 return self.view(db.execute("SELECT * FROM jobs WHERE dedupe = ?", (dedupe,)).fetchone()), False
         return self.get(job_id), True
@@ -159,6 +199,11 @@ class Jobs:
 
 def run_job(job, jobs, source, thresholds, timeout, fetch):
     try:
+        context = json.loads(job.get("context") or "{}")
+        if ("stopping_policy" in context and context["stopping_policy"] != STOPPING_POLICY or
+                job["method"] == "circa" and "feature_policy" in context and context["feature_policy"] != FEATURE_POLICY):
+            raise ValueError("Queued calibration policy is outdated; recalibrate before submitting a new diagnosis")
+        source, thresholds = context.get("source", source), context.get("thresholds", thresholds)
         frame = fetch(source, job["start"], job["end"])
         rows = frame.astype(object).where(frame.notna(), None).values.tolist()
         incident = Incident(columns=list(frame.columns), rows=rows, inject_time=job["inject_time"],
@@ -167,11 +212,11 @@ def run_job(job, jobs, source, thresholds, timeout, fetch):
     except requests.RequestException as exc:
         logging.warning(json.dumps({"event": "job_retry", "id": job["id"], "error": str(exc)}))
         retry = job["attempts"] < MAX_ATTEMPTS
-        jobs.finish(job["id"], "queued" if retry else "failed", error=f"Prometheus unavailable: {exc}",
+        jobs.finish(job["id"], "queued" if retry else "failed", error="Prometheus unavailable" if source.get("provider", "prometheus") == "prometheus" else "Telemetry provider unavailable",
                     ready_at=time.time() + RETRY_SECONDS)
     except Exception as exc:
         logging.exception("job %s failed", job["id"])
-        jobs.finish(job["id"], "failed", error=getattr(exc, "detail", None) or str(exc))
+        jobs.finish(job["id"], "failed", error="The telemetry query or analysis failed. Check service logs and the source configuration.")
 
 
 def work(jobs, source, thresholds, timeout, slots, fetch, stop):
@@ -253,7 +298,8 @@ def diagnose(incident, thresholds, timeout):
     scores = anomaly_scores(df, incident.inject_time)
     graph = None
     if incident.edges is not None:
-        graph = nx.DiGraph(incident.edges)
+        identities = {raw_service_of(column): service_of(column) for column in remaining}
+        graph = nx.DiGraph((identities.get(a, a), identities.get(b, b)) for a, b in incident.edges)
         graph.add_nodes_from(service_of(c) for c in remaining)
     if incident.anomaly_threshold is not None and (scores.empty or scores.max() < incident.anomaly_threshold):
         return {"status": "no_significant_anomaly", "root_causes": [], "rounds": [],
@@ -295,14 +341,26 @@ def calibration_thresholds(calibration):
 def create_app(token, thresholds=None, timeout=20, concurrency=2, source=None, db_path=None, fetch=fetch_window):
     if not token or len(token) < 16:
         raise ValueError("API token must be at least 16 characters")
+    if db_path:
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    jobs = Jobs(db_path) if db_path else None
+    saved = jobs.connection() if jobs else None
+    if saved:
+        source = validate_source(saved["source"])
+        thresholds = saved["thresholds"]
+        if (saved.get("stopping_policy") != STOPPING_POLICY or
+                "circa" in thresholds and saved.get("feature_policy") != FEATURE_POLICY):
+            thresholds = {}
     thresholds = thresholds or {}
+    config_lock = threading.RLock()
     if timeout <= 0 or not math.isfinite(timeout) or any(v < 0 or not math.isfinite(v) for v in thresholds.values()):
         raise ValueError("invalid timeout or calibration")
     if isinstance(concurrency, bool) or not isinstance(concurrency, int) or concurrency < 1:
         raise ValueError("concurrency must be a positive integer")
     if source is not None and not db_path:
         raise ValueError("a job database path is required when a Prometheus source is configured")
-    jobs = Jobs(db_path) if source is not None else None
+    if jobs is not None and source is not None:
+        jobs.bind_legacy_jobs({"source": source, "thresholds": thresholds, "stopping_policy": STOPPING_POLICY, "feature_policy": FEATURE_POLICY})
     slots = threading.BoundedSemaphore(concurrency)
     stop = threading.Event()
 
@@ -330,8 +388,8 @@ def create_app(token, thresholds=None, timeout=20, concurrency=2, source=None, d
             raise HTTPException(401, "invalid API key")
 
     def require_jobs(method):
-        if jobs is None:
-            raise HTTPException(503, "no Prometheus source configured (--source / CORCA_SOURCE)")
+        if jobs is None or source is None:
+            raise HTTPException(503, "Connect a telemetry source in Integrations first")
         if method not in thresholds:
             raise HTTPException(422, f"no calibrated tau for {method}; deploy with a calibration file")
 
@@ -349,8 +407,145 @@ def create_app(token, thresholds=None, timeout=20, concurrency=2, source=None, d
     @app.get("/v1/config", dependencies=[Depends(authorized)])
     def config():
         """What this server can do, so clients only offer working options."""
-        return {"methods": sorted(thresholds), "prometheus": jobs is not None,
-                "alert_method": source["alert_method"] if source else None}
+        with config_lock:
+            return {"methods": sorted(thresholds), "prometheus": source is not None,
+                    "alert_method": source["alert_method"] if source else None}
+
+    def revision():
+        return hashlib.sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()[:16] if source else None
+
+    def current_context():
+        return {"source": source, "thresholds": thresholds, "stopping_policy": STOPPING_POLICY, "feature_policy": FEATURE_POLICY}
+
+    def check_revision(expected):
+        if expected != revision():
+            raise HTTPException(409, "The connection changed. Reload and discover services again.")
+
+    @app.post("/v1/connections", dependencies=[Depends(authorized)])
+    def connect(setup: ConnectionSetup):
+        nonlocal source, thresholds
+        if jobs is None:
+            raise HTTPException(409, "Start the service with a persistent job database to save connections")
+        try:
+            candidate = validate_source(setup.source)
+        except (ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(422, str(exc))
+        provider = candidate["provider"]
+        hostname = urlsplit(candidate.get("prometheus_url", candidate.get("url"))).hostname
+        allowed = {"localhost", "127.0.0.1", "::1"} | {h.strip() for h in os.getenv("CORCA_ALLOWED_SOURCE_HOSTS", "").split(",") if h.strip()}
+        if source:
+            allowed.add(urlsplit(source.get("prometheus_url", source.get("url", ""))).hostname)
+        vendor = (provider in ("datadog", "newrelic") or
+                  provider == "grafana" and hostname.endswith(".grafana.net") or
+                  provider == "dynatrace" and hostname.endswith(".live.dynatrace.com"))
+        if hostname not in allowed and not vendor:
+            raise HTTPException(422, "Your administrator must add this telemetry hostname to CORCA_ALLOWED_SOURCE_HOSTS on the server")
+        # Restrict web-managed credentials to telemetry-specific secrets, not arbitrary server environment variables.
+        for field in ("token_env", "api_key_env", "app_key_env"):
+            if field in candidate and not candidate[field].startswith("CORCA_TELEMETRY_"):
+                raise HTTPException(422, "Credential variable names must start with CORCA_TELEMETRY_")
+        with config_lock:
+            check_revision(setup.revision)
+            jobs.save_connection({"source": candidate, "thresholds": {}})
+            source, thresholds = candidate, {}  # a changed source must not inherit unrelated calibration
+        return {"connected": True, "revision": revision(), "calibration_required": True}
+
+    @app.post("/v1/services/discover", dependencies=[Depends(authorized)])
+    def discover():
+        with config_lock:
+            context, source_revision = current_context(), revision()
+        configured = context["source"]
+        if configured is None:
+            raise HTTPException(409, "Connect a telemetry source first")
+        if not slots.acquire(blocking=False):
+            raise HTTPException(503, "Service is busy. Try discovery again shortly.")
+        try:
+            end = time.time() - SCRAPE_LAG
+            frame = fetch(configured, end - max(300, 12 * configured["step"]), end)
+            return {**discover_services(frame, configured), "revision": source_revision, "checked_at": time.time()}
+        except Exception:
+            logging.exception("Service discovery failed")
+            raise HTTPException(502, "Discovery failed. Check the endpoint, queries, service dimension, and credential environment variables on the server.")
+        finally:
+            slots.release()
+
+    @app.post("/v1/topology", dependencies=[Depends(authorized)])
+    def topology(setup: TopologySetup):
+        nonlocal source, thresholds
+        with config_lock:
+            check_revision(setup.revision)
+            if source is None or jobs is None:
+                raise HTTPException(409, "Connect a telemetry source first")
+            if any(a not in setup.services or b not in setup.services for a, b in setup.edges):
+                raise HTTPException(422, "Dependencies must refer to selected services")
+            try:
+                candidate = validate_source({**source, "services": setup.services, "edges": [list(e) for e in setup.edges]})
+            except (ValueError, TypeError, KeyError) as exc:
+                raise HTTPException(422, str(exc))
+            jobs.save_connection({"source": candidate, "thresholds": {}})
+            source, thresholds = candidate, {}
+        return {"saved": True, "revision": revision(), "calibration_required": True}
+
+    @app.post("/v1/calibration", dependencies=[Depends(authorized)])
+    def upload_calibration(setup: CalibrationSetup):
+        nonlocal thresholds
+        with config_lock:
+            check_revision(setup.revision)
+            if source is None or jobs is None:
+                raise HTTPException(409, "Connect a telemetry source first")
+            if "edges" not in source or not source.get("services"):
+                raise HTTPException(422, "Confirm selected services and dependencies before loading calibration")
+            try:
+                candidate = calibration_thresholds(setup.calibration)
+            except (ValueError, TypeError, KeyError, AttributeError):
+                raise HTTPException(422, "Upload a current CoRCA calibration artifact with methods, tau values, and matching stopping/feature policies")
+            if not candidate:
+                raise HTTPException(422, "Calibration has no supported methods")
+            jobs.save_connection({"source": source, "thresholds": candidate})
+            thresholds = candidate
+        return {"loaded": True, "methods": sorted(thresholds)}
+
+    @app.get("/v1/integrations", dependencies=[Depends(authorized)])
+    def integrations():
+        """Safe deployment metadata; never expose source URLs, queries, or credentials."""
+        with config_lock:
+            return {"provider": source.get("provider", "prometheus") if source else None,
+                    "revision": revision(), "minimum_window_seconds": max(60, 10 * source["step"]) if source else 60,
+                    "prometheus": {"configured": source is not None,
+                                    "metric_kinds": sorted(source["queries"]) if source else [],
+                                    "service_count": len(source.get("services") or []) if source else 0,
+                                    "step_seconds": source["step"] if source else None,
+                                    "topology": "custom" if source and "edges" in source else "online_boutique_default"},
+                    "alertmanager": {"ready": bool(source and source["alert_method"] in thresholds),
+                                     "method": source["alert_method"] if source else None,
+                                     "lead_seconds": source["alert_lead_seconds"] if source else None},
+                    "calibrated_methods": sorted(thresholds)}
+
+    @app.post("/v1/integrations/check", dependencies=[Depends(authorized)])
+    @app.post("/v1/integrations/prometheus/check", dependencies=[Depends(authorized)], deprecated=True)
+    def check_prometheus():
+        """Check the active source, not an arbitrary browser-supplied URL."""
+        with config_lock:
+            configured = source
+        if configured is None:
+            raise HTTPException(409, "Connect a telemetry source first.")
+        if not slots.acquire(blocking=False):
+            raise HTTPException(503, "Service is busy. Try the connection check again shortly.")
+        try:
+            end = time.time() - SCRAPE_LAG
+            frame = fetch(configured, end - max(300, 12 * configured["step"]), end)
+            observed = frame.drop(columns=["time"], errors="ignore").dropna(axis=1, how="all")
+            if observed.empty:
+                raise HTTPException(422, "No usable recent metrics. Check queries, service labels, credentials, and reporting.")
+            return {"status": "verified", "checked_at": time.time(), "metrics": len(observed.columns),
+                    "services": len({service_of(c) for c in observed.columns})}
+        except HTTPException:
+            raise
+        except Exception:
+            logging.exception("Telemetry connection check failed")
+            raise HTTPException(502, "Metrics could not be read. Ask your administrator to check the source URL, queries, and service logs.")
+        finally:
+            slots.release()
 
     @app.get("/healthz")
     def health():
@@ -370,24 +565,32 @@ def create_app(token, thresholds=None, timeout=20, concurrency=2, source=None, d
 
     @app.post("/v1/diagnoses", status_code=202, dependencies=[Depends(authorized)])
     def submit(window: WindowRequest):
-        """Queue a diagnosis for a time window; poll GET /v1/diagnoses/{id} for the result."""
-        require_jobs(window.method)
-        if window.inject_time > time.time() + 3600:
-            raise HTTPException(422, "inject_time is more than an hour in the future")
-        return jobs.add(window.method, window.inject_time, window.normal_seconds, window.anomaly_seconds)[0]
+        """Queue a diagnosis with an immutable source/calibration snapshot."""
+        with config_lock:
+            require_jobs(window.method)
+            minimum = 10 * source["step"]
+            normal = window.normal_seconds if "normal_seconds" in window.model_fields_set else max(window.normal_seconds, minimum)
+            anomaly = window.anomaly_seconds if "anomaly_seconds" in window.model_fields_set else max(window.anomaly_seconds, minimum)
+            if min(normal, anomaly) < minimum:
+                raise HTTPException(422, f"Each window needs at least {minimum} seconds for this source resolution")
+            if window.inject_time > time.time() + 3600:
+                raise HTTPException(422, "inject_time is more than an hour in the future")
+            return jobs.add(window.method, window.inject_time, normal, anomaly, context=current_context())[0]
 
     @app.post("/v1/alerts", dependencies=[Depends(authorized)])
     def alert(hook: AlertmanagerWebhook):
-        """Alertmanager webhook receiver: one diagnosis per alert group and start time."""
-        method = source["alert_method"] if source else "baro"
-        require_jobs(method)
-        firing = [a.startsAt.timestamp() for a in hook.alerts if a.status == "firing"]
-        if hook.status != "firing" or not firing:
-            return {"accepted": False, "reason": "no firing alerts"}
-        # Alerts fire after their `for:` delay, so the fault began earlier than startsAt.
-        inject_time = min(firing) - source["alert_lead_seconds"]
-        job, created = jobs.add(method, inject_time, 300, 120, dedupe=f"{hook.groupKey}@{inject_time:.0f}")
-        return {"accepted": True, "duplicate": not created, **job}
+        """Alertmanager webhook receiver: one diagnosis per alert group, source, and start time."""
+        with config_lock:
+            method = source["alert_method"] if source else "baro"
+            require_jobs(method)
+            firing = [a.startsAt.timestamp() for a in hook.alerts if a.status == "firing"]
+            if hook.status != "firing" or not firing:
+                return {"accepted": False, "reason": "no firing alerts"}
+            inject_time = min(firing) - source["alert_lead_seconds"]
+            minimum = 10 * source["step"]
+            job, created = jobs.add(method, inject_time, max(300, minimum), max(120, minimum),
+                                    dedupe=f"{revision()}:{hook.groupKey}@{inject_time:.0f}", context=current_context())
+            return {"accepted": True, "duplicate": not created, **job}
 
     @app.get("/v1/diagnoses/{job_id}", dependencies=[Depends(authorized)])
     def get_diagnosis(job_id: str):
@@ -431,7 +634,7 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--calibration", default=os.getenv("CORCA_CALIBRATION"))
-    parser.add_argument("--source", default=os.getenv("CORCA_SOURCE"), help="Prometheus source config JSON")
+    parser.add_argument("--source", default=os.getenv("CORCA_SOURCE"), help="Bootstrap telemetry source JSON (saved workspace connection takes precedence)")
     parser.add_argument("--db", default=os.getenv("CORCA_DB", "runtime/.state/corca.db"))
     args = parser.parse_args()
     token_path = Path(os.getenv("CORCA_TOKEN_FILE", "runtime/.state/api-token"))
@@ -443,7 +646,7 @@ def main():
                 os.chmod(token_path, 0o600)
                 stream.write(secrets.token_urlsafe(32))
         token = token_path.read_text().strip()
-    thresholds = {}
+    thresholds = None
     if args.calibration:
         thresholds = calibration_thresholds(json.loads(Path(args.calibration).read_text()))
     source = load_source(args.source) if args.source else None

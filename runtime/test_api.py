@@ -22,7 +22,7 @@ def test_authentication_and_health():
     with TestClient(create_app(TOKEN)) as client:
         assert client.get("/healthz").status_code == 200
         home = client.get("/")
-        assert home.status_code == 200 and "find every root cause" in home.text
+        assert home.status_code == 200 and "investigate the root causes" in home.text
         assert client.get("/app").status_code == 200
         assert client.get("/v1/config").status_code == 401
         assert client.get("/v1/config", headers={"X-API-Key": TOKEN}).json() == {
@@ -302,3 +302,36 @@ def test_explained_lists_only_observed_services():
         result = client.post("/diagnose", json=data, headers={"X-API-Key": TOKEN}).json()
     assert result["rounds"][0]["service"] == "cartservice"
     assert result["rounds"][0]["explained"] == ["frontend"]
+
+
+def test_integration_metadata_is_authenticated_and_redacted(tmp_path):
+    source = dict(SOURCE, prometheus_url="https://user:secret@internal.example", queries={"cpu": "private_query"})
+    with TestClient(create_app(TOKEN, {"baro": 6}, source=source, db_path=tmp_path / "jobs.db", fetch=fake_fetch)) as client:
+        assert client.get("/v1/integrations").status_code == 401
+        response = client.get("/v1/integrations", headers={"X-API-Key": TOKEN})
+        assert response.json()["prometheus"]["metric_kinds"] == ["cpu"]
+        assert response.json()["alertmanager"]["ready"] is True
+        assert not any(value in response.text for value in ("secret", "internal.example", "private_query"))
+        assert client.post("/v1/integrations/prometheus/check").status_code == 401
+        check = client.post("/v1/integrations/prometheus/check", headers={"X-API-Key": TOKEN})
+        assert check.status_code == 200 and check.json()["services"] == 2 and check.json()["metrics"] == 2
+
+
+def test_integration_check_handles_missing_source_gaps_and_failure(tmp_path):
+    headers = {"X-API-Key": TOKEN}
+    with TestClient(create_app(TOKEN)) as client:
+        assert client.get("/v1/integrations", headers=headers).json()["prometheus"]["configured"] is False
+        assert client.post("/v1/integrations/prometheus/check", headers=headers).status_code == 409
+
+    def no_data(*_):
+        return pd.DataFrame({"time": [1, 2], "cartservice_cpu": [float("nan"), float("nan")]})
+
+    def down(*_):
+        raise requests.ConnectionError("secret URL must not leak")
+
+    for fetch, status in ((no_data, 422), (down, 502), (fake_fetch, 200)):
+        with TestClient(create_app(TOKEN, source=SOURCE, db_path=tmp_path / "checks.db", fetch=fetch)) as client:
+            for _ in range(3):  # failures must release capacity for subsequent requests
+                response = client.post("/v1/integrations/prometheus/check", headers=headers)
+                assert response.status_code == status
+                assert "secret URL" not in response.text

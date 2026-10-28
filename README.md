@@ -128,23 +128,40 @@ they are not directories automatically created by the runner.
 
 ## Running the diagnosis service
 
-The API diagnoses incidents from Prometheus by itself: give it a time, or point
-Alertmanager at it. Results are stored (SQLite) and survive restarts.
+The API reads service metrics from Prometheus, Grafana Cloud Metrics, Datadog,
+Dynatrace, or New Relic. Give it an incident time, or point Alertmanager at it.
+Results and browser-managed connections are stored in SQLite and survive restarts.
 
-Open `/` for the product page and `/app` for the console: sign in with the API
-key, start a diagnosis by picking when the problem began, and read the root
-causes round by round. Alert-started diagnoses appear in the same list.
+Open `/` for the product page and `/app` for the workspace. Connect with the
+service API key supplied by the deployment administrator. The overview shows
+setup progress and recent diagnoses. Integrations connects a telemetry provider;
+Services discovers reporting services and metric gaps, saves dependencies, and
+loads matching calibration. Diagnoses supports search, status filters, shared
+links, and JSON exports. Existing agents and OpenTelemetry collection can feed
+the connected backend. See [telemetry setup](docs/telemetry-setup.md) for provider
+credentials, query examples, resolution limits, and persistence behavior.
+
+This is a **trusted-team, self-hosted beta**, with one shared API key and one
+service replica. It does not implement individual identities, SSO, enforced roles,
+tenant isolation, or an audit log. Use a private network or an HTTPS access gateway.
+See [the beta review](docs/beta-review.md) for validation and rollout limits.
 
 ```bash
 docker build -f runtime/Dockerfile -t corca:0.2.0 .
 python -m runtime.deploy --image corca:0.2.0 --calibration results/controls-v1/calibration.json
-# other clusters: --source my-source.json (see runtime/source.online-boutique.json)
+# runtime.deploy targets the dedicated corca-lab cluster only.
+# Other clusters: adapt runtime/deployment.yaml and mount your own source, calibration, and key.
 ```
 
 | Endpoint | Auth | Purpose |
 |---|---|---|
 | `POST /v1/diagnoses` `{"inject_time": <unix s>}` | key | queue a diagnosis; returns `202` + `id` |
 | `GET /v1/diagnoses/{id}`, `GET /v1/diagnoses?limit=20` | key | result / history |
+| `GET /v1/config`, `GET /v1/integrations` | key | capabilities and redacted integration configuration |
+| `POST /v1/connections` | key | save one active source using server credential references; clears calibration |
+| `POST /v1/services/discover` | key | discover services and per-metric coverage from the active source |
+| `POST /v1/topology`, `POST /v1/calibration` | key | save service scope/dependencies and load matching calibration |
+| `POST /v1/integrations/check` | key | verify recent metrics from the active source |
 | `POST /v1/alerts` | key | Alertmanager webhook; repeats of one alert group are deduplicated |
 | `POST /diagnose` | key | synchronous, caller uploads the metric matrix (evaluation path) |
 | `GET /healthz`, `GET /readyz` | none | liveness; readiness = calibration loaded and job store usable |
@@ -163,7 +180,7 @@ curl -s localhost:8000/v1/diagnoses/<id> -H "X-API-Key: $TOKEN"   # status: queu
 A job waits until `inject_time + anomaly_seconds` (default 120 s) plus 15 s of
 scrape lag, then pulls `normal_seconds` (default 300 s) of history. A finished
 job's `result.status` is `diagnosed`, `partial_unexplained`, `partial_timeout`,
-`insufficient_evidence` or `no_significant_anomaly`. Prometheus outages are
+`insufficient_evidence` or `no_significant_anomaly`. Provider network failures are
 retried 3 times, 30 s apart; other failures are reported in `error`.
 
 Alertmanager receiver:
@@ -181,11 +198,15 @@ receivers:
 The diagnosis window starts `alert_lead_seconds` (default 60) before the alert's
 `startsAt`, because alerts fire after their `for:` delay.
 
-**Source config.** `queries` maps a metric kind to PromQL returning one series per
-service, labelled with `service_label`. Use kinds `cpu`, `mem` (resource metrics
+**Source config.** `provider` defaults to `prometheus`. `queries` maps metric kinds
+to provider queries returning one series per service, labelled/grouped by
+`service_label`. Use kinds `cpu`, `mem` (resource metrics
 are kept as candidates during explain-away), `latency-90`, `error`, `workload`.
 `services` filters which services count; `edges` (`[caller, callee]`) is the
-call graph, defaulting to Online Boutique's. Service names cannot contain `_`.
+call graph. Legacy configurations fall back to Online Boutique's graph; use the
+Services page to confirm actual dependencies for another environment. Live
+service IDs containing underscores are escaped in internal metric column names
+and decoded for analysis and display.
 
 **Operating limits.** The bundled Online Boutique config has CPU and memory only;
 the lab's latency/error features come from trace files, which are not in

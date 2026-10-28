@@ -6,7 +6,7 @@
 <title>CoRCA Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #f6f8fb; --surface: #ffffff; --ink: #14213d; --ink-2: #4a5468; --line: #d9dfe8;
@@ -17,17 +17,17 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #0f1626; --surface: #172036; --ink: #edf1f7; --ink-2: #a9b3c4; --line: #2c3850;
-      --fault: #f0646a; --fault-tint: #3d1d25; --root: #5598e7; --root-tint: #1d3152;
+      --fault: #f0646a; --fault-tint: #3d1d25; --root: #91bcff; --root-tint: #1d3152;
       --warn: #f2b84b; --warn-tint: #3a2e12; --quiet: #1d2740; --selected: #1d2c48;
       color-scheme: dark;
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 "Google Sans", system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; font-optical-sizing: auto; }
   a { color: var(--root); }
   button, input, select { font: inherit; color: inherit; }
   :focus-visible { outline: 3px solid var(--root); outline-offset: 2px; border-radius: 6px; }
-  code, .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: .88em; }
+  code, .mono { font-family: ui-monospace, Menlo, monospace; font-size: .88em; }
   [hidden] { display: none !important; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -137,32 +137,184 @@
     .detail { padding: 22px 18px; }
   }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } .toast { transition: none; } }
+
+  .dependency-row { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto; gap: 12px; align-items: center; margin: 12px 0; }
+  .service-choice { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+  .service-choice input { width: 18px; height: 18px; }
+  input[type=file] { max-width: 100%; font: inherit; }
+  @media(max-width:600px) { #service-search { flex-basis: 100%; } .dependency-row { grid-template-columns: minmax(0,1fr) auto; } .dependency-arrow { display: none; } .dependency-row select { grid-column: 1; } .dependency-row button { grid-column: 2; grid-row: 1 / 3; } }
+  /* Workspace: quiet operational surfaces, blue reserved for actions and evidence. */
+  :root { --root: #195fba; --nav: #10243a; }
+  body { font-size: 15px; }
+  .skip { position: fixed; top: -100px; left: 16px; z-index: 20; background: var(--surface); padding: 12px; }
+  .skip:focus { top: 8px; }
+  .skip:not(:focus) { clip-path: inset(50%); width: 1px; height: 1px; padding: 0; overflow: hidden; }
+  header.top .in { max-width: none; height: 64px; padding: 0 28px; }
+  .brand small { border-left: 1px solid var(--line); padding-left: 12px; }
+  .beta { font: 11px/1.5 ui-monospace, monospace; border: 1px solid var(--line); padding: 3px 7px; border-radius: 5px; letter-spacing: .08em; }
+  .header-actions { display: flex; align-items: center; gap: 14px; }
+  .shell { display: grid; grid-template-columns: 224px minmax(0,1fr); min-height: calc(100vh - 65px); }
+  .sidebar { background: var(--nav); color: #d8e2ed; padding: 28px 16px; }
+  .sidebar .eyebrow { color: #aebed0; padding: 0 12px; }
+  .sidebar nav { display: grid; gap: 6px; margin: 18px 0 32px; }
+  .sidebar button { text-align: left; display: flex; align-items: center; gap: 12px; border: 0; background: transparent; color: #d8e2ed; padding: 12px; border-radius: 7px; cursor: pointer; min-height: 46px; }
+  .sidebar button:hover { background: #203a55; }
+  .sidebar button[aria-current=page] { background: #284b70; color: #fff; }
+  .nav-icon { font: 19px/1 monospace; width: 22px; text-align: center; }
+  .sidebar-note { border-top: 1px solid #365069; padding: 20px 12px; font-size: 13px; color: #bac9d8; }
+  .sidebar-note strong { display: block; color: #fff; margin-bottom: 6px; }
+  .workspace-content { min-width: 0; padding: 32px clamp(18px,3vw,44px) 64px; max-width: 1600px; width: 100%; margin: 0 auto; }
+  .pagehead { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 28px; }
+  .pagehead h1 { font-size: clamp(26px,3vw,34px); line-height: 1.2; letter-spacing: -.025em; margin: 4px 0 8px; }
+  .pagehead p { margin: 0; color: var(--ink-2); max-width: 50em; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+  .btn { border-radius: 7px; font-size: 14px; min-height: 42px; padding: 0 16px; }
+  .btn.primary { background: var(--root); border-color: var(--root); color: #fff; }
+  .btn.primary:hover { filter: brightness(.9); }
+  .card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 24px; min-width: 0; }
+  .card h2 { font-size: 19px; margin: 0 0 8px; }
+  .card h3 { font-size: 16px; margin: 0 0 6px; }
+  .card p { color: var(--ink-2); margin: 0 0 16px; }
+  .stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat { padding: 20px 24px; }
+  .stat strong { display: block; font-size: 30px; font-weight: 500; margin: 8px 0 0; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 13px; color: var(--ink-2); }
+  .dashboard-grid { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(280px,1fr); gap: 24px; }
+  .checklist { list-style: none; padding: 0; margin: 20px 0 0; }
+  .checklist li { display: grid; grid-template-columns: 30px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 18px 0; border-top: 1px solid var(--line); }
+  .checklist p { margin: 4px 0 0; font-size: 14px; }
+  .step-number { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 50%; font-size: 12px; color: var(--ink-2); }
+  .step-number.done { background: var(--root-tint); color: var(--root); border-color: transparent; }
+  .connection-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .connection-row:last-child { border: 0; }
+  .connection-row p { margin: 3px 0 0; font-size: 13px; }
+  .section-title { display: flex; gap: 12px; justify-content: space-between; align-items: center; margin: 28px 0 14px; }
+  .section-title h2 { font-size: 19px; margin: 0; }
+  .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+  th { font-weight: 500; color: var(--ink-2); background: var(--bg); font-size: 12px; }
+  td,th { padding: 15px 20px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  td button { border: 0; padding: 6px 0; background: transparent; color: var(--root); cursor: pointer; font: inherit; }
+  .console { max-width: none; padding: 0; grid-template-columns: minmax(300px, .85fr) minmax(0,1.4fr); gap: 22px; }
+  .listhead h1 { font-size: 18px; }
+  .detail { border-radius: 10px; }
+  .filters { display: flex; gap: 12px; margin-bottom: 20px; }
+  .filters input { flex: 1; min-width: 0; }
+  .filters select { width: auto; }
+  input[type=text],input[type=url],textarea { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); padding: 10px 12px; font: inherit; }
+  textarea { min-height: 150px; font-family: ui-monospace,monospace; font-size: 13px; resize: vertical; }
+  .integration-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+  .integration-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .integration-title h2 { margin: 0; }
+  .integration-mark { width: 40px; height: 40px; background: var(--root-tint); color: var(--root); border-radius: 9px; display: grid; place-items: center; font-weight: 600; font-size: 20px; }
+  .inline-note { color: var(--ink-2); font-size: 13px; margin-top: 12px; }
+  .notice { border-left: 3px solid var(--root); background: var(--root-tint); padding: 16px 20px; margin: 22px 0; border-radius: 0 7px 7px 0; }
+  .notice p { margin: 4px 0 0; color: var(--ink-2); }
+  .setup-section { margin-top: 24px; scroll-margin-top: 20px; }
+  .setup-section summary { cursor: pointer; font-size: 17px; font-weight: 500; padding: 4px 0; }
+  .setup-body { margin-top: 20px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+  .hint { color: var(--ink-2); font-size: 13px; margin: 5px 0 0; }
+  pre.snippet { background: var(--bg); border: 1px solid var(--line); padding: 18px; border-radius: 8px; overflow: auto; font: 13px/1.7 ui-monospace,monospace; }
+  .guide-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .guide-grid ul,.guide-grid ol { padding-left: 20px; color: var(--ink-2); }
+  .guide-grid li { margin: 10px 0; }
+  .signin { grid-template-columns: minmax(0,520px) minmax(0,420px); justify-content: center; gap: 70px; }
+  .signin-story h1 { font-size: clamp(32px,4vw,48px); line-height: 1.12; letter-spacing: -.03em; margin: 16px 0 20px; }
+  .signin-story p { color: var(--ink-2); max-width: 38em; }
+  .signin-story .notice { font-size: 14px; }
+  @media (prefers-color-scheme: dark) { :root { --root: #91bcff; } .btn.primary { background: #246bc1; border-color: #246bc1; } }
+  @media (max-width:1100px) { .dashboard-grid,.console { grid-template-columns: 1fr; } .signin { gap: 30px; } .stats { gap: 10px; } .stat { padding: 16px; } }
+  @media (max-width:760px) { .shell { grid-template-columns: 1fr; } .sidebar { padding: 12px; } .sidebar nav { display: flex; flex-wrap: wrap; margin: 0; gap: 4px; } .sidebar button { padding: 10px; font-size: 13px; } .sidebar .eyebrow,.sidebar-note,.nav-icon { display: none; } .workspace-content { padding-top: 24px; } .stats { grid-template-columns: 1fr 1fr; } .integration-grid,.guide-grid,.form-grid,.signin { grid-template-columns: 1fr; } .signin-story { max-width: 420px; } .signin { gap: 20px; } .signin-story h1 { font-size: 30px; } .signin-story .notice { display: none; } .pagehead { align-items: flex-start; flex-wrap: wrap; } header.top .in { padding: 0 18px; } .brand small { display: none; } .checklist li { grid-template-columns: 28px minmax(0,1fr); } .checklist .btn { grid-column: 2; justify-self: start; } .filters { flex-wrap: wrap; } .filters select { width: 100%; } }
+
+
+  :root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --motion-fast: 140ms; --motion-enter: 200ms; }
+  .btn, .replay { transition: transform var(--motion-fast) var(--ease-out), background-color var(--motion-fast) ease, border-color var(--motion-fast) ease; }
+  .btn:active:not(:disabled):not(:focus-visible), .replay:active:not(:focus-visible) { transform: scale(.98); }
+  @media (hover: hover) and (pointer: fine) {
+    .btn:not(:disabled):hover, .replay:hover { transform: translateY(-1px); }
+    .btn:active:not(:disabled):not(:focus-visible), .replay:active:not(:focus-visible) { transform: scale(.98); }
+  }
+
+  /* Enter once when shown; polling and search keep the reading surface still. */
+  .page, .panel, .signin-story, #new-form, .setup-body {
+    transition: opacity var(--motion-enter) var(--ease-out), transform var(--motion-enter) var(--ease-out);
+  }
+  @starting-style {
+    body:not([data-input="keyboard"]) :is(.page, .panel, .signin-story, #new-form, .setup-body):not([hidden]) {
+      opacity: 0; transform: translateY(6px);
+    }
+  }
+  .sidebar button, .item, .quick button, .chip, input, select, textarea {
+    transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  }
+  .item[aria-current="true"] { box-shadow: inset 3px 0 0 var(--root); }
+  .setup-section[open] > summary { color: var(--root); }
+  .toast { transform: translate(-50%, 8px); transition: opacity var(--motion-enter) var(--ease-out), transform var(--motion-enter) var(--ease-out); }
+  .toast.show { transform: translate(-50%, 0); }
+  .btn[aria-busy="true"] { cursor: progress; }
+  .btn[aria-busy="true"]::before {
+    content: ""; width: 14px; height: 14px; flex: none; border: 2px solid currentColor;
+    border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite;
+  }
+
+  /* Keyboard commands remain immediate, including transitions already in flight. */
+  html:has(body[data-input="keyboard"]) { scroll-behavior: auto; }
+  body[data-input="keyboard"] *, body[data-input="keyboard"] *::before, body[data-input="keyboard"] *::after {
+    transition: none !important; animation: none !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    html { scroll-behavior: auto; }
+  }
+
 </style>
 </head>
 <body>
+<a class="skip" href="#workspace-content">Skip to workspace</a>
 <header class="top">
   <div class="in">
     <a class="brand" href="/" aria-label="CoRCA home">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="5" cy="19" r="3" fill="#2a78d6"/><circle cx="19" cy="19" r="3" fill="#2a78d6"/><path d="M10.5 7.5 6.5 16.5M13.5 7.5l4 9" stroke="currentColor" stroke-width="2"/></svg>
       CoRCA <small>Console</small>
     </a>
-    <button class="btn quiet" id="signout" type="button" hidden>Sign out</button>
+    <div class="header-actions"><span class="beta">BETA</span><button class="btn quiet" id="signout" type="button" hidden>Disconnect</button></div>
   </div>
 </header>
 
 <main id="signin" class="signin" hidden>
+  <section class="signin-story"><span class="eyebrow">Incident intelligence · Self-hosted beta</span><h1>From cascading symptoms<br>to a clearer root cause.</h1><p>Connect to your team’s CoRCA deployment to investigate incidents, inspect the evidence, and bring alerts into one diagnosis workflow.</p><div class="notice"><strong>Your infrastructure. Your telemetry.</strong><p>CoRCA reads your connected telemetry source. This console connects only to the service serving this page.</p></div><a href="/">Explore how CoRCA works →</a></section>
   <form class="panel" id="signin-form" novalidate>
-    <h1>Sign in</h1>
-    <p class="help">Use the API key of this CoRCA service. Whoever deployed it can find the key in <code>runtime/.state/api-token</code>.</p>
+    <h1>Connect your workspace</h1>
+    <p class="help">Enter the service API key provided by your deployment administrator. All key holders share this deployment and its diagnosis history.</p>
     <label class="field" for="key">API key</label>
     <input id="key" type="password" autocomplete="current-password" required aria-describedby="signin-error">
-    <label class="check"><input id="remember" type="checkbox"> Keep me signed in on this device</label>
-    <button class="btn primary" type="submit" id="signin-btn">Sign in</button>
-    <p class="error" id="signin-error" role="alert"></p>
+    <label class="check"><input id="remember" type="checkbox"> Remember key on this device (trusted devices only)</label>
+    <button class="btn primary" type="submit" id="signin-btn">Connect to CoRCA</button>
+    <p class="error" id="signin-error" role="alert"></p><details class="more"><summary>Setting up for the first time?</summary><p class="hint">Your administrator starts CoRCA with persistent storage and configures access to your telemetry provider. The default key file is <code>runtime/.state/api-token</code>. Use HTTPS or a private local tunnel to connect.</p></details>
   </form>
 </main>
 
-<main id="console" class="console" hidden>
+<div class="shell" id="shell" hidden>
+  <aside class="sidebar"><div class="eyebrow">Your deployment</div><nav aria-label="Workspace">
+    <button type="button" data-view="overview"><span class="nav-icon" aria-hidden="true">◫</span>Overview</button>
+    <button type="button" data-view="diagnoses"><span class="nav-icon" aria-hidden="true">◎</span>Diagnoses</button>
+    <button type="button" data-view="services"><span class="nav-icon" aria-hidden="true">▦</span>Services</button>
+    <button type="button" data-view="integrations"><span class="nav-icon" aria-hidden="true">⌘</span>Integrations</button>
+    <button type="button" data-view="guide"><span class="nav-icon" aria-hidden="true">≡</span>Workspace guide</button>
+  </nav><div class="sidebar-note"><strong>Evidence before action</strong>Review the named causes alongside your telemetry before taking action.</div></aside>
+  <main class="workspace-content" id="workspace-content" tabindex="-1"><p id="workspace-status" class="error" role="status"></p>
+    <section id="view-overview" class="page" aria-labelledby="overview-title">
+      <div class="pagehead"><div><div class="eyebrow">Workspace / Overview</div><h1 id="overview-title">Your incident workspace</h1><p>A clear path from your first connection to your next investigation.</p></div><button class="btn primary" data-action="diagnose">New diagnosis</button></div>
+      <div class="stats" id="stats"></div>
+      <div class="dashboard-grid"><section class="card"><h2>Get your workspace ready</h2><p>Connect telemetry, validate the setup, then investigate an incident.</p><ol class="checklist" id="setup-checklist"></ol></section>
+      <section class="card"><h2>Connection health</h2><p>Configuration and verification are shown separately.</p><div id="connection-summary"></div><button class="btn" data-view="integrations" style="margin-top:20px">Manage integrations →</button></section></div>
+      <div class="section-title"><h2>Recent diagnoses</h2><button class="btn quiet" data-view="diagnoses">View all →</button></div><div id="recent-jobs"></div>
+    </section>
+    <section id="view-diagnoses" class="page" hidden aria-labelledby="diagnoses-title"><div class="pagehead"><div><div class="eyebrow">Workspace / Investigate</div><h1 id="diagnoses-title">Diagnoses</h1><p>Trace symptoms back to candidate root causes and review the evidence.</p></div><button class="btn" id="refresh-btn">Refresh</button></div>
+    <div class="filters"><label class="sr" for="job-search">Search diagnoses</label><input type="text" id="job-search" placeholder="Search service, method, or diagnosis ID"><label class="sr" for="job-status">Filter by status</label><select id="job-status"><option value="all">All statuses</option><option value="active">In progress</option><option value="done">Completed</option><option value="attention">Needs attention</option><option value="failed">Failed</option></select></div>
+<div id="console" class="console" hidden>
   <div class="banner" id="banner" role="status" hidden>
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
     <span id="banner-text"></span>
@@ -211,14 +363,64 @@
   <section class="detail placeholder" id="detail" aria-live="polite" tabindex="-1">
     <p>Select a diagnosis to see its root causes.</p>
   </section>
-</main>
+</div></section>
+    <section id="view-services" class="page" hidden aria-labelledby="services-title"><div class="pagehead"><div><div class="eyebrow">Workspace / Services</div><h1 id="services-title">Discover your services</h1><p>Check reporting coverage, select the services to analyze, and confirm their dependencies.</p></div><button class="btn primary" id="discover-services">Discover services</button></div><p id="discovery-status" role="status" class="inline-note"></p>
+      <div class="card" id="services-empty"><h2>One connection. Multiple services.</h2><p>Save a telemetry source in Integrations, then discover the services returned by its queries. Discovery reads metrics and does not install software.</p><button class="btn" data-view="integrations">Connect a source →</button></div>
+      <div id="services-content" hidden><div class="notice" id="coverage-warning" hidden></div><div class="filters"><label class="sr" for="service-search">Search services</label><input id="service-search" type="text" placeholder="Search discovered services"><button class="btn" id="select-reporting" type="button">Select reporting services</button></div><div id="service-inventory"></div>
+      <section class="card setup-section"><h2>Confirm service dependencies</h2><p>Choose who calls whom. Metrics identify services, but do not establish call relationships. Dependencies below come from your configuration or your entries.</p><div id="dependency-rows"></div><button class="btn" id="add-dependency" type="button">Add dependency</button><label class="check"><input type="checkbox" id="independent-services">These selected services are independent; save an empty dependency graph.</label><div class="actions"><button class="btn primary" id="save-topology" type="button">Save services & dependencies</button></div><p class="error" id="topology-error" role="alert"></p><p class="inline-note" id="topology-status" role="status"></p></section>
+      <section class="card setup-section"><h2>Load calibration, then investigate</h2><p>Use a CoRCA calibration file fitted on drills and healthy controls from these queries, services, resolution, and dependencies. Saving services or changing the source clears old calibration.</p><label class="field" for="calibration-file">Calibration JSON file</label><input id="calibration-file" type="file" accept=".json,application/json"><label class="check"><input type="checkbox" id="calibration-confirm">This calibration was collected using the current telemetry and dependencies.</label><div class="actions"><button class="btn" id="load-calibration" type="button">Load calibration</button><button class="btn primary" data-action="diagnose">New diagnosis</button></div><p class="error" id="calibration-error" role="alert"></p><p class="inline-note" id="calibration-status" role="status"></p></section></div>
+    </section>
+    <section id="view-integrations" class="page" hidden aria-labelledby="integrations-title">
+      <div class="pagehead"><div><div class="eyebrow">Workspace / Connect</div><h1 id="integrations-title">Integrations</h1><p>Connect a telemetry provider once. Discover and select the services it reports.</p></div><button class="btn" id="reload-config">Reload configuration</button></div>
+      <div class="integration-grid">
+        <article class="card"><div class="integration-title"><span class="integration-mark" aria-hidden="true">P</span><span id="prom-status" class="chip tone-muted">Loading</span></div><h2 id="active-provider-title">Telemetry source</h2><p id="active-provider-description">Connect your existing monitoring platform, then discover the services it reports.</p><div id="prom-facts" class="inline-note"></div><div class="actions"><button class="btn primary" id="check-prom" disabled>Verify metrics</button><button class="btn" data-setup="source-setup">Setup instructions</button></div><p id="prom-check-result" class="inline-note" role="status"></p></article>
+        <article class="card"><div class="integration-title"><span class="integration-mark" aria-hidden="true">A</span><span id="alert-status" class="chip tone-muted">Loading</span></div><h2>Alertmanager</h2><p>Automatically queue diagnoses from firing alerts. Duplicate notifications reuse the same diagnosis.</p><div id="alert-facts" class="inline-note"></div><div class="actions"><button class="btn" data-setup="alert-setup">Configure receiver →</button></div><p class="inline-note">Receiver readiness does not confirm delivery. Send a real test alert from your Alertmanager to verify the full path.</p></article>
+      </div>
+      <details class="card setup-section" id="source-setup" open><summary>1. Connect your telemetry provider</summary><div class="setup-body"><p>Choose your existing monitoring platform. One source supplies metrics for multiple services; individual application API keys are not needed. This beta uses one active source at a time.</p>
+      <form id="source-form"><div class="form-grid"><div><label class="field" for="source-provider">Telemetry provider</label><select id="source-provider"><option value="prometheus">Prometheus / OpenTelemetry metrics</option><option value="grafana">Grafana Cloud Metrics</option><option value="datadog">Datadog</option><option value="dynatrace">Dynatrace</option><option value="newrelic">New Relic</option></select></div><div><label class="field" for="source-url">Query endpoint</label><input id="source-url" type="url" required placeholder="http://localhost:9090"><p class="hint" id="source-url-hint">Use the Prometheus server URL, reachable from CoRCA.</p></div></div>
+      <div class="form-grid"><div><label class="field" for="source-label">Service label or dimension</label><input id="source-label" type="text" required value="service" pattern="[a-zA-Z_][a-zA-Z0-9_.-]*"><p class="hint">Queries must return one series per service, grouped by this label.</p></div><div><label class="field" for="source-step">Metric resolution</label><select id="source-step"><option value="5">5 seconds</option><option value="15">15 seconds</option><option value="30">30 seconds</option><option value="60">60 seconds</option></select><p class="hint">Coarser metrics require longer diagnosis windows.</p></div></div>
+      <div class="form-grid" id="source-credentials"><div><label class="field" for="source-token-env">Credential environment variable (optional)</label><input id="source-token-env" type="text" placeholder="CORCA_TELEMETRY_PROMETHEUS_TOKEN" pattern="CORCA_TELEMETRY_[A-Za-z0-9_]+"><p class="hint">Enter the variable’s name, never the API key itself. Your administrator sets its value on the CoRCA server.</p></div><div id="source-user-field" hidden><label class="field" for="source-username">Metrics instance ID</label><input id="source-username" type="text" autocomplete="off"></div><div id="source-app-key-field" hidden><label class="field" for="source-app-key">Application-key environment variable</label><input id="source-app-key" type="text" placeholder="CORCA_TELEMETRY_DATADOG_APP_KEY" pattern="CORCA_TELEMETRY_[A-Za-z0-9_]+"></div><div id="source-account-field" hidden><label class="field" for="source-account">New Relic account ID</label><input id="source-account" type="number" min="1" step="1"></div></div>
+      <label class="field" for="source-queries">Service metric queries (JSON)</label><textarea id="source-queries" required spellcheck="false"></textarea><p class="hint" id="source-query-hint">Adapt the examples to your metric names and labels. Add latency and error metrics when available.</p>
+      <details class="more" style="margin-top:12px"><summary>Administrator connection notes</summary><label class="field" for="source-alert-method">Automatic alert ranking method</label><select id="source-alert-method"><option value="baro">BARO</option><option value="circa">CIRCA</option></select><p class="hint">Load calibration for this method before enabling the Alertmanager receiver.</p><p class="hint" id="source-admin-note">For a remote private endpoint, allow its hostname with CORCA_ALLOWED_SOURCE_HOSTS on the CoRCA server. Connections use read-only queries. Query URLs must not contain credentials.</p></details>
+      <div class="notice"><strong>A new connection requires matching calibration.</strong><p>Saving replaces the active source and clears its calibration. Previously queued diagnoses retain their original source and thresholds.</p></div>
+      <div class="actions"><button class="btn primary" id="connect-source" type="submit">Connect & discover services</button><button class="btn" id="download-source" type="button">Download source file</button></div><p class="error" id="source-error" role="alert"></p><p class="inline-note" id="source-success" role="status"></p></form></div></details>
+      <details class="card setup-section" id="otel-setup"><summary>Using OpenTelemetry or an agent?</summary><div class="setup-body"><p>Keep your existing Datadog, Dynatrace, or New Relic instrumentation and select that provider above. For vendor-neutral instrumentation, send OpenTelemetry metrics through a Collector into Prometheus or Grafana Cloud, then connect that query backend.</p><p>Set a distinct <code>service.name</code> for each application. CoRCA reads historical metric queries; it is not an OTLP ingest endpoint or a logs/traces backend.</p><pre class="snippet"># Application environment (adapt the Collector address)
+OTEL_SERVICE_NAME=payments
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_METRIC_EXPORT_INTERVAL=15000</pre><p class="hint">Configure the Collector’s metrics pipeline and a durable metrics backend. If Prometheus labels differ from service.name, choose the actual query label above.</p><a href="https://opentelemetry.io/docs/collector/configuration/" target="_blank" rel="noopener">OpenTelemetry Collector setup ↗</a></div></details>
+      <details class="card setup-section" id="alert-setup"><summary>2. Route alerts from Alertmanager</summary><div class="setup-body"><p>Add this receiver to your Alertmanager configuration and route the relevant alerts to <code>corca</code>. Replace the URL if your service uses a different namespace or hostname.</p><pre class="snippet" id="alert-snippet">receivers:
+  - name: corca
+    webhook_configs:
+      - url: http://corca-api.corca.svc:8000/v1/alerts
+        send_resolved: false
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/corca-token</pre><button class="btn" id="copy-alert">Copy receiver configuration</button><p class="hint">Mount the deployment’s API key at the credentials_file path inside Alertmanager. Set a matching route.receiver; merge with existing routing rather than replacing it. CoRCA diagnoses firing alerts only.</p></div></details>
+      <details class="card setup-section"><summary>3. Connect through the API</summary><div class="setup-body"><p>Use the deployment API key from a trusted client. Keep keys out of URLs and shared reports.</p><pre class="snippet" id="api-snippet"></pre><button class="btn" id="download-schema">Download API schema</button><p class="hint">The schema download requires your current authenticated connection.</p></div></details>
+    </section>
+    <section id="view-guide" class="page" hidden aria-labelledby="guide-title"><div class="pagehead"><div><div class="eyebrow">Workspace / Guide</div><h1 id="guide-title">One workflow. Clear responsibilities.</h1><p>What your team needs to connect, investigate, and operate this beta.</p></div></div>
+      <div class="guide-grid"><article class="card"><h2>Deployment administrators</h2><ol><li>Deploy one CoRCA instance with persistent storage and a private network or HTTPS access gateway.</li><li>Connect a telemetry provider and discover reporting services.</li><li>Confirm dependencies and load calibration fitted to the same telemetry.</li><li>Provide the service URL and API key to trusted responders. Mount the key in Alertmanager for automatic diagnoses.</li></ol><button class="btn" data-view="integrations">Set up integrations →</button></article>
+      <article class="card"><h2>Incident responders</h2><ol><li>Connect using the API key supplied by your administrator.</li><li>Start a diagnosis at the first sign of the incident. CoRCA compares healthy and incident windows.</li><li>Review candidate causes, explained symptoms, and remaining anomalies.</li><li>Cross-check with dashboards and logs. Download a result or share a diagnosis link with your team.</li></ol><button class="btn primary" data-action="diagnose">Start an investigation →</button></article>
+      <article class="card"><h2>Understand the evidence</h2><ul><li>Score share compares anomaly scores; it is not a probability of correctness.</li><li>Partial results need further investigation. A timeout does not establish that all causes were found.</li><li>Missing telemetry and an inaccurate dependency graph can hide causes.</li><li>CPU and memory alone may miss delay faults. Include latency and error metrics where available.</li></ul></article>
+      <article class="card"><h2>Beta access & operating limits</h2><ul><li>This is a shared, single-deployment workspace. Every API key holder has the same access.</li><li>Individual accounts, SSO, role enforcement, tenant isolation, and an audit trail are not available in this beta.</li><li>Run behind your organization’s access gateway before sharing outside a trusted team.</li><li>SQLite supports one service replica. Plan database and identity work before broader enterprise rollout.</li></ul></article></div>
+    </section>
+  </main>
+</div>
 
 <div class="toast" id="toast" role="status"></div>
 
 <script>
 (() => {
+  document.addEventListener("pointerdown", () => { document.body.dataset.input = "pointer"; }, {passive: true});
+  document.addEventListener("keydown", () => { document.body.dataset.input = "keyboard"; });
   /* ---------- small helpers (server data only ever goes into textContent) ---------- */
   const $ = (id) => document.getElementById(id);
+  function busy(button, active) {
+    button.disabled = active;
+    button.setAttribute("aria-busy", String(active));
+  }
   function h(tag, props, ...kids) {
     const e = document.createElement(tag);
     for (const [k, v] of Object.entries(props || {})) {
@@ -266,15 +468,19 @@
 
   /* ---------- API ---------- */
   let key = store.get();
+  let sessionVersion = 0;
   class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
   async function api(path, options = {}) {
     let res;
+    const requestSession = sessionVersion;
     try {
-      res = await fetch(path, { ...options, headers: { "X-API-Key": key, "Content-Type": "application/json", ...(options.headers || {}) } });
-    } catch { throw new ApiError(0, "Can't reach the CoRCA service. Check your connection; retrying automatically."); }
+      res = await fetch(path, { signal: AbortSignal.timeout(path.endsWith("/check") || path.endsWith("/discover") ? 300000 : 15000), ...options, headers: { "X-API-Key": key, "Content-Type": "application/json", ...(options.headers || {}) } });
+    } catch { throw new ApiError(0, "The service did not respond. Check your connection and try again."); }
+    if (requestSession !== sessionVersion) throw new ApiError(401, "Connection changed");
     if (res.status === 401) { signOut("That key was not accepted. Check it and try again."); throw new ApiError(401, "signed out"); }
     let body = null;
     try { body = await res.json(); } catch {}
+    if (requestSession !== sessionVersion) throw new ApiError(401, "Connection changed");
     if (!res.ok) {
       const d = body && body.detail;
       const msg = Array.isArray(d) ? d.map((x) => x.msg).join("; ") : d || `Request failed (${res.status}).`;
@@ -285,10 +491,13 @@
 
   /* ---------- status vocabulary ---------- */
   function statusOf(job) {
-    if (job.status === "queued") return { label: "Waiting for data", tone: "muted", icon: "clock",
-      text: `CoRCA waits until the fault has shown up in the metrics. Analysis starts at about ${fmtClock(job.window[1] + 15)}.` };
+    if (job.status === "queued") {
+      if (job.attempts > 0) return {label: "Retrying metrics", tone: "warn", icon: "clock", text: "The telemetry provider could not be reached. CoRCA will retry automatically. Check the source connection if retries continue."};
+      if (job.window[1] + 15 <= Date.now()/1000) return {label: "Queued", tone: "muted", icon: "clock", text: "The metric window is ready. This diagnosis is waiting for analysis capacity."};
+      return { label: "Waiting for data", tone: "muted", icon: "clock", text: `CoRCA waits until the fault has shown up in the metrics. Analysis starts at about ${fmtClock(job.window[1] + 15)}.` };
+    }
     if (job.status === "running") return { label: "Analyzing", tone: "muted", icon: "spin",
-      text: "Pulling metrics from Prometheus and ranking services. This usually takes under a minute." };
+      text: "Pulling service metrics and ranking candidate root causes. This usually takes under a minute." };
     if (job.status === "failed") return { label: "Failed", tone: "bad", icon: "x",
       text: job.error || "The diagnosis could not run." };
     const r = job.result || {};
@@ -305,7 +514,7 @@
       partial_timeout: { label: "Timed out", tone: "warn", icon: "warn",
         text: "The analysis ran out of time. Root causes found before that are shown; the rest of the window was not analyzed." },
       insufficient_evidence: { label: "Not enough data", tone: "warn", icon: "dash",
-        text: "Too few metrics had data in this window to name a root cause. Check that Prometheus was scraping these services." },
+        text: "Too few metrics had data in this window to name a root cause. Check service reporting and the selected metric queries." },
       no_significant_anomaly: { label: "No anomaly", tone: "muted", icon: "dash",
         text: "Nothing in this window was abnormal enough to diagnose." },
     }[r.status] || { label: r.status || "Done", tone: "muted", icon: "check", text: "" };
@@ -314,24 +523,38 @@
   const active = (job) => job.status === "queued" || job.status === "running";
 
   /* ---------- state ---------- */
-  let config = null, jobs = [], selected = null, pollTimer = null, lastError = "";
+  let config = null, jobs = [], selected = null, pollTimer = null, lastError = "", integration = null, verified = null, refreshSequence = 0, renderedJobs = null, discovery = null, selectedServices = new Set(), topologyDirty = false;
 
   function showBanner(text) { $("banner").hidden = !text; $("banner-text").textContent = text || ""; }
 
   async function refresh() {
     clearTimeout(pollTimer);
+    const sequence = ++refreshSequence;
     try {
-      jobs = await api("/v1/diagnoses?limit=50");
+      const latest = await api("/v1/diagnoses?limit=200");
+      if (sequence !== refreshSequence) return;
+      jobs = latest;
       lastError = "";
       if (selected && !jobs.some((j) => j.id === selected)) {
-        try { jobs.push(await api(`/v1/diagnoses/${encodeURIComponent(selected)}`)); } catch {}
+        try { jobs.push(await api(`/v1/diagnoses/${encodeURIComponent(selected)}`)); }
+        catch(e) {
+          if (e.status === 401) return;
+          lastError = e.status === 404 ? "The linked diagnosis was not found on this deployment. Choose one from the list." : e.message;
+        }
       }
-      renderList(); renderDetail();
+      if (sequence !== refreshSequence) return;
+      const snapshot = JSON.stringify(jobs);
+      if (snapshot !== renderedJobs) {
+        renderedJobs = snapshot;
+        renderList(); renderDetail(); renderOverview();
+      }
     } catch (e) {
       if (e.status === 401) return;
       lastError = e.message;
     }
+    if (sequence !== refreshSequence) return;
     showBanner(lastError || configWarning());
+    $("workspace-status").textContent = lastError || "";
     if (!key) return;
     pollTimer = setTimeout(refresh, document.hidden ? 60000 : jobs.some(active) ? 4000 : 30000);
   }
@@ -339,8 +562,8 @@
 
   function configWarning() {
     if (!config) return "";
-    if (!config.prometheus) return "This server has no Prometheus source configured, so it can't run diagnoses from here. Deploy it with a source config (CORCA_SOURCE).";
-    if (!config.methods.length) return "This server has no calibration loaded, so diagnoses can't start yet. Deploy it with a calibration file.";
+    if (!config.prometheus) return "Connect a telemetry source in Integrations, then discover services and load calibration.";
+    if (!config.methods.length) return "Load matching calibration from the Services page before starting a diagnosis.";
     return "";
   }
 
@@ -354,7 +577,12 @@
         h("button", { class: "btn", type: "button", onclick: openForm }, "New diagnosis")));
       return;
     }
-    for (const job of jobs) {
+    const query = $("job-search").value.trim().toLowerCase();
+    const filter = $("job-status").value;
+    const filtered = jobs.filter(job => (!query || [job.id, job.method, ...(job.result?.root_causes || [])].join(" ").toLowerCase().includes(query)) &&
+      (filter === "all" || filter === "active" && active(job) || filter === "done" && job.status === "done" || filter === "failed" && job.status === "failed" || filter === "attention" && needsAttention(job)));
+    if (!filtered.length) list.append(h("li", {class: "empty"}, "No diagnoses match. Change the search or status filter."));
+    for (const job of filtered) {
       const st = statusOf(job);
       const roots = job.result && job.result.root_causes || [];
       list.append(h("li", {}, h("button", {
@@ -370,10 +598,12 @@
   }
 
   function select(id, focus) {
+    const entering = $("view-diagnoses").hidden;
     selected = id;
-    if (location.hash !== `#${id}`) history.replaceState(null, "", `#${id}`);
+    navigate("diagnoses");
+    if (location.hash !== `#${id}`) history.replaceState(null, "", `?view=diagnoses#${encodeURIComponent(id)}`);
     renderList(); renderDetail();
-    if (focus && matchMedia("(max-width: 860px)").matches) { $("detail").focus(); $("detail").scrollIntoView({ block: "start" }); }
+    if (entering || focus && matchMedia("(max-width: 860px)").matches) { $("detail").focus(); $("detail").scrollIntoView({ block: "start" }); }
   }
 
   /* ---------- detail ---------- */
@@ -425,6 +655,7 @@
 
     const actions = h("div", { class: "actions" },
       h("button", { class: "btn", type: "button", onclick: () => copyLink(job) }, "Copy link"),
+      h("button", { class: "btn", type: "button", onclick: () => download(`corca-${job.id}.json`, JSON.stringify(job, null, 2)) }, "Download result"),
       !active(job) && h("button", { class: "btn", type: "button", onclick: () => rerun(job) }, "Run again"));
     nodes.push(actions);
     if (job.result) nodes.push(h("details", { class: "raw" }, h("summary", {}, "Show raw result"),
@@ -433,7 +664,7 @@
   }
 
   async function copyLink(job) {
-    const url = `${location.origin}${location.pathname}#${job.id}`;
+    const url = `${location.origin}${location.pathname}?view=diagnoses#${encodeURIComponent(job.id)}`;
     try { await navigator.clipboard.writeText(url); toast("Link copied."); }
     catch { toast(url); }
   }
@@ -456,9 +687,12 @@
     $("started").value = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}T${pad(t.getHours())}:${pad(t.getMinutes())}`;
   }
   function openForm() {
+    if (topologyDirty) { navigate("services"); toast("Save your service and dependency changes before diagnosing."); return; }
+    navigate("diagnoses");
+    if (!(config?.prometheus && config.methods.length)) { navigate("integrations"); toast("Connect telemetry, confirm services, and load matching calibration before starting a diagnosis."); return; }
     $("new-form").hidden = false; $("new-btn").setAttribute("aria-expanded", "true");
     $("new-error").textContent = "";
-    if (!$("started").value) setStarted(5);
+    if (!$("started").value) setStarted(Math.max(5, Math.ceil((integration?.minimum_window_seconds || 60)/60) + 1));
     $("started").focus();
   }
   function closeForm() { $("new-form").hidden = true; $("new-btn").setAttribute("aria-expanded", "false"); $("new-btn").focus(); }
@@ -476,9 +710,10 @@
     if (!$("started").value || !Number.isFinite(started)) return (err.textContent = "Enter when the problem started.");
     if (started > Date.now() / 1000 + 60) return (err.textContent = "The start time is in the future.");
     if (!(normal >= 60 && normal <= 3600)) return (err.textContent = "Healthy minutes before must be between 1 and 60.");
+    if (Math.min(normal, after) < (integration?.minimum_window_seconds || 60)) return (err.textContent = `Each window needs at least ${(integration.minimum_window_seconds / 60).toFixed(0)} minutes for this source resolution.`);
     if (!(after >= 60 && after <= 1800)) return (err.textContent = "Minutes after start must be between 1 and 30.");
     if (!method) return (err.textContent = "This server has no calibrated method yet.");
-    $("start-btn").disabled = true;
+    busy($("start-btn"), true);
     try {
       const job = await api("/v1/diagnoses", { method: "POST",
         body: JSON.stringify({ inject_time: started, method, normal_seconds: normal, anomaly_seconds: after }) });
@@ -488,7 +723,7 @@
       selected = job.id; await refresh();
     } catch (ex) {
       if (ex.status !== 401) err.textContent = ex.message;
-    } finally { $("start-btn").disabled = false; }
+    } finally { busy($("start-btn"), false); }
   });
 
   function renderMethods() {
@@ -500,14 +735,256 @@
     $("new-btn").disabled = !(config && config.prometheus && methods.length);
   }
 
+
+  /* Workspace views use real deployment state; connection checks are never persisted as health. */
+  const views = ["overview", "diagnoses", "services", "integrations", "guide"];
+  function navigate(view, updateURL = true) {
+    if (!views.includes(view)) view = "overview";
+    const changed = $("view-" + view).hidden;
+    for (const name of views) $("view-" + name).hidden = view !== name;
+    document.querySelectorAll(".sidebar [data-view]").forEach(button => {
+      if (button.dataset.view === view) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    if (changed) window.scrollTo({top: 0, behavior: "instant"});
+    document.title = `${view[0].toUpperCase() + view.slice(1)} · CoRCA`;
+    if (updateURL) history.replaceState(null, "", `?view=${view}${view === "diagnoses" && selected ? "#" + encodeURIComponent(selected) : ""}`);
+  }
+  document.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => navigate(b.dataset.view)));
+  document.querySelectorAll('[data-action="diagnose"]').forEach(b => b.addEventListener("click", openForm));
+  document.querySelectorAll("[data-setup]").forEach(b => b.addEventListener("click", () => {
+    const section = $(b.dataset.setup); section.open = true; section.scrollIntoView({block: "start"}); section.querySelector("summary").focus();
+  }));
+  $("job-search").addEventListener("input", renderList);
+  $("job-status").addEventListener("change", renderList);
+  $("refresh-btn").addEventListener("click", refresh);
+  const needsAttention = job => job.status === "failed" || job.status === "done" && ["warn", "bad"].includes(statusOf(job).tone);
+  function renderOverview() {
+    const available = Boolean(config?.prometheus && config.methods.length);
+    $("stats").replaceChildren(...[
+      ["Recent diagnoses", jobs.length, "Up to 200 most recent"],
+      ["In progress", jobs.filter(active).length, "Queued or analyzing"],
+      ["Needs attention", jobs.filter(needsAttention).length, "Failed or incomplete evidence"],
+      ["Calibrated methods", config?.methods.length || 0, config?.methods.map(m => m.toUpperCase()).join(" · ") || "Administrator setup needed"]
+    ].map(([label,value,note]) => h("div", {class: "card stat"}, h("div",{class:"eyebrow"},label),h("strong",{},value),h("span",{},note))));
+    const steps = [
+      ["Connect service metrics", config?.prometheus ? "Telemetry source saved. Discover reporting services next." : "Choose your Prometheus, Grafana, Datadog, Dynatrace, or New Relic source.", !!config?.prometheus, "Integrations", () => navigate("integrations")],
+      ["Confirm services & dependencies", integration?.prometheus.topology === "custom" ? "Review coverage and selected service dependencies." : "Discover services and confirm their caller → callee relationships.", integration?.prometheus.topology === "custom", "Services", () => navigate("services")],
+      ["Load matching calibration", config?.methods.length ? `Ready for ${config.methods.join(" and ").toUpperCase()}.` : "Load a calibration file fitted to your current telemetry and dependencies.", !!config?.methods.length, "Calibration", () => navigate("services")],
+      ["Investigate your first incident", jobs.length ? "Review findings and any unexplained symptoms." : "Choose when an incident began to compare healthy and affected metrics.", jobs.length > 0, jobs.length ? "View diagnoses" : "Start diagnosis", () => jobs.length ? navigate("diagnoses") : openForm()]
+    ];
+    $("setup-checklist").replaceChildren(...steps.map(([title,description,done,label,action],index) => h("li",{},h("span",{class:`step-number ${done ? "done" : ""}`,"aria-label":done ? "Complete" : `Step ${index+1}`},done ? "✓" : index+1),h("div",{},h("strong",{},title),h("p",{},description)),h("button",{class:"btn",type:"button",onclick:action},label))));
+    $("connection-summary").replaceChildren(...[
+      [providerName(integration?.provider), verified ? `Verified ${fmtTime(verified.checked_at)}` : config?.prometheus ? "Connected · verification needed" : "Not configured"],
+      ["Diagnosis service", available ? "Ready to queue diagnoses" : "Setup required"],
+      ["Alertmanager", integration?.alertmanager.ready ? "Receiver ready · delivery unverified" : "Receiver needs setup"]
+    ].map(([title,state]) => h("div",{class:"connection-row"},h("div",{},h("strong",{},title),h("p",{},state)))));
+    const box = $("recent-jobs");
+    if (!jobs.length) { box.replaceChildren(h("div",{class:"empty"},h("p",{},"Your first investigation starts here. Connect your metrics, then choose an incident to diagnose."),h("button",{class:"btn",onclick:()=>navigate("integrations")},"Set up connections"))); return; }
+    box.replaceChildren(h("div",{class:"table-wrap"},h("table",{},h("caption",{class:"sr"},"Five most recent diagnoses"),h("thead",{},h("tr",{},["Candidate root causes","Status","Incident start","Method"].map(t=>h("th",{scope:"col"},t)))),h("tbody",{},jobs.slice(0,5).map(job=>h("tr",{},h("td",{},h("button",{type:"button",onclick:()=>select(job.id,false)},job.result?.root_causes?.join(" + ") || (active(job) ? "Investigation in progress" : "Review diagnosis"))),h("td",{},chip(statusOf(job))),h("td",{},fmtTime(job.inject_time)),h("td",{class:"mono"},job.method.toUpperCase())))))));
+  }
+  async function loadIntegrations() {
+    try { integration = await api("/v1/integrations"); renderIntegrations(); renderOverview(); }
+    catch(e) { if(e.status !== 401) $("prom-check-result").textContent = e.message; }
+  }
+  function renderIntegrations() {
+    const prom = integration.prometheus, alert = integration.alertmanager;
+    $("active-provider-title").textContent = providerName(integration.provider);
+    const minimum = Math.ceil((integration.minimum_window_seconds || 60)/60);
+    for (const id of ["normal", "after"]) {
+      $(id).min = minimum;
+      if (+$(id).value < minimum) $(id).value = minimum;
+    }
+    $("discover-services").disabled = !prom.configured;
+    $("source-setup").open = !prom.configured;
+    $("prom-status").textContent = prom.configured ? verified ? "Metrics verified" : "Configured" : "Setup required";
+    $("prom-status").className = `chip tone-${prom.configured ? "good" : "warn"}`;
+    $("check-prom").disabled = !prom.configured;
+    $("prom-facts").textContent = prom.configured ? `${prom.metric_kinds.join(" · ")} · ${prom.step_seconds}s query step · ${prom.service_count || "All matching"} services · ${prom.topology === "custom" ? "Custom dependencies" : "Online Boutique default graph"}` : "No telemetry source connected yet.";
+    $("alert-status").textContent = alert.ready ? "Receiver ready" : "Setup required";
+    $("alert-status").className = `chip tone-${alert.ready ? "good" : "warn"}`;
+    $("alert-facts").textContent = alert.ready ? `${alert.method.toUpperCase()} · incident starts ${alert.lead_seconds}s before alert time` : "Requires a source and calibration for the alert ranking method.";
+    $("api-snippet").textContent = String.raw`# Set TOKEN securely in your local environment
+curl -H "X-API-Key: $TOKEN" \
+  "${location.origin}/v1/diagnoses?limit=20"`;
+  }
+  $("reload-config").addEventListener("click", async () => {
+    const button = $("reload-config"); button.disabled = true; discovery = null; renderServices();
+    try { config = await api("/v1/config"); verified = null; $("prom-check-result").textContent = ""; renderMethods(); await loadIntegrations(); await refresh(); }
+    catch(e) { if(e.status !== 401) toast(e.message); }
+    finally { button.disabled = false; }
+  });
+  $("check-prom").addEventListener("click", async () => {
+    const button = $("check-prom"); busy(button, true); button.textContent = "Checking metrics…";
+    $("prom-check-result").textContent = "Reading recent metrics from the active source…";
+    try {
+      verified = await api("/v1/integrations/prometheus/check", {method:"POST"});
+      $("prom-check-result").textContent = `${verified.metrics} metrics across ${verified.services} services. Verified ${fmtTime(verified.checked_at)}. This is a point-in-time check.`;
+    } catch(e) { verified = null; if(e.status !== 401) $("prom-check-result").textContent = e.message; }
+    finally { busy(button, false); button.disabled = !config?.prometheus; button.textContent = "Verify metrics"; if(integration) { renderIntegrations(); renderOverview(); } }
+  });
+  function download(name, content) {
+    const url = URL.createObjectURL(new Blob([content], {type: "application/json"}));
+    const a = h("a",{href:url,download:name}); document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  $("copy-alert").addEventListener("click",async()=>{try { await navigator.clipboard.writeText($("alert-snippet").textContent); toast("Receiver configuration copied."); } catch { toast("Select and copy the configuration above."); }});
+  $("download-schema").addEventListener("click",async()=>{try { download("corca-openapi.json",JSON.stringify(await api("/openapi.json"),null,2)); } catch(e) { if(e.status!==401) toast(e.message); }});
+
+  const providerName = provider => ({prometheus:"Prometheus",grafana:"Grafana Cloud Metrics",datadog:"Datadog",dynatrace:"Dynatrace",newrelic:"New Relic"}[provider] || "Telemetry source");
+  let dependencyDraft = [];
+  function markTopologyDirty() { topologyDirty = true; $("topology-status").textContent = "Unsaved service changes. Save before loading calibration or diagnosing."; }
+  const providerDefaults = {
+    prometheus: {url:"",label:"service",step:5,token:"",queries:{cpu:"sum by (service) (rate(process_cpu_seconds_total[1m]))",mem:"sum by (service) (process_resident_memory_bytes)"},hint:"PromQL examples: adapt metric names and service labels to your exporter or Collector."},
+    grafana: {url:"",label:"service",step:15,token:"CORCA_TELEMETRY_GRAFANA_TOKEN",queries:{cpu:"sum by (service) (rate(process_cpu_seconds_total[1m]))",mem:"sum by (service) (process_resident_memory_bytes)"},hint:"Use your Cloud Metrics query endpoint and a metrics:read access-policy token. Queries use PromQL."},
+    datadog: {url:"https://api.datadoghq.com",label:"service",step:60,token:"CORCA_TELEMETRY_DATADOG_API_KEY",queries:{latency:"avg:trace.web.request.duration{*} by {service}.rollup(avg,60)",error:"sum:trace.web.request.errors{*} by {service}.rollup(sum,60)"},hint:"Replace web.request with your APM span name or use your service metrics. Group by the service tag and use 60-second rollups. API and application keys need read/query permissions."},
+    dynatrace: {url:"",label:"dt.entity.service",step:60,token:"CORCA_TELEMETRY_DYNATRACE_TOKEN",queries:{"latency-90":'builtin:service.response.time:splitBy("dt.entity.service"):percentile(90)',error:'builtin:service.errors.total.count:splitBy("dt.entity.service"):sum'},hint:"Use Metrics API v2 selectors split by the service dimension. The token needs metrics.read. Services use their stable entity IDs; dependency entries must use those same IDs."},
+    newrelic: {url:"https://api.newrelic.com/graphql",label:"appName",step:60,token:"CORCA_TELEMETRY_NEWRELIC_TOKEN",queries:{latency:"SELECT average(duration) AS value FROM Transaction FACET appName",error:"SELECT percentage(count(*), WHERE error IS true) AS value FROM Transaction FACET appName"},hint:"Use NRQL SELECT queries with one service FACET and one numeric AS value. Do not add SINCE, UNTIL, TIMESERIES, or LIMIT; CoRCA sets the time window. Use a User API key with account query access."}
+  };
+  function configureProvider() {
+    const provider = $("source-provider").value, defaults = providerDefaults[provider];
+    $("source-url").value = defaults.url;
+    $("source-label").value = defaults.label;
+    $("source-step").value = String(defaults.step);
+    $("source-step").disabled = !["prometheus","grafana"].includes(provider);
+    $("source-token-env").value = defaults.token;
+    $("source-token-env").required = provider !== "prometheus";
+    $("source-queries").value = JSON.stringify(defaults.queries,null,2);
+    $("source-query-hint").textContent = defaults.hint;
+    $("source-user-field").hidden = provider !== "grafana";
+    $("source-username").required = provider === "grafana"; $("source-username").disabled = provider !== "grafana";
+    $("source-app-key-field").hidden = provider !== "datadog";
+    $("source-app-key").required = provider === "datadog"; $("source-app-key").disabled = provider !== "datadog";
+    $("source-app-key").value = provider === "datadog" ? "CORCA_TELEMETRY_DATADOG_APP_KEY" : "";
+    $("source-account-field").hidden = provider !== "newrelic";
+    $("source-account").required = provider === "newrelic"; $("source-account").disabled = provider !== "newrelic";
+    $("source-url").placeholder = provider === "grafana" ? "https://prometheus-prod-XX.grafana.net/api/prom" : provider === "dynatrace" ? "https://YOUR-ENV.live.dynatrace.com" : "http://localhost:9090";
+    $("source-url-hint").textContent = ["prometheus","grafana"].includes(provider) ? "Use the historical metrics query endpoint, not a dashboard or Collector scrape URL." : "Use the API endpoint for your provider’s region, reachable from CoRCA.";
+    $("source-error").textContent = "";
+  }
+  $("source-provider").addEventListener("change", configureProvider);
+  function readSource() {
+    const provider = $("source-provider").value, url = new URL($("source-url").value);
+    if (!["http:","https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw Error("Use an HTTP(S) endpoint without credentials, query parameters, or fragments.");
+    const queries = JSON.parse($("source-queries").value);
+    if (!queries || Array.isArray(queries) || typeof queries !== "object" || !Object.keys(queries).length || !Object.entries(queries).every(([kind,query])=>kind.trim() && typeof query === "string" && query.trim())) throw Error("Metric queries must map metric kinds to nonempty query strings.");
+    const source = {provider,service_label:$("source-label").value,step:+$("source-step").value,queries,alert_method:$("source-alert-method").value,alert_lead_seconds:60};
+    source[["prometheus","grafana"].includes(provider) ? "prometheus_url" : "url"] = url.href.replace(/\/$/,"");
+    const token = $("source-token-env").value.trim();
+    if (token) source[provider === "datadog" ? "api_key_env" : "token_env"] = token;
+    if (provider === "grafana") source.username = $("source-username").value.trim();
+    if (provider === "datadog") source.app_key_env = $("source-app-key").value.trim();
+    if (provider === "newrelic") source.account_id = +$("source-account").value;
+    return source;
+  }
+  $("download-source").addEventListener("click",()=>{
+    if (!$("source-form").reportValidity()) return;
+    try { download("source.json",JSON.stringify(readSource(),null,2)); $("source-error").textContent = ""; }
+    catch(error) { $("source-error").textContent = error.message; }
+  });
+  $("source-form").addEventListener("submit",async event=>{
+    event.preventDefault(); $("source-error").textContent = ""; $("source-success").textContent = "";
+    busy($("connect-source"),true);
+    try {
+      await api("/v1/connections",{method:"POST",body:JSON.stringify({source:readSource(),revision:integration?.revision || null})});
+      verified = null; discovery = null; dependencyDraft = []; topologyDirty = false;
+      config = await api("/v1/config"); await loadIntegrations(); renderMethods(); renderServices();
+      $("source-success").textContent = "Connection saved. Discover services, confirm dependencies, then load matching calibration.";
+      navigate("services"); await discoverServices();
+    } catch(error) { if(error.status!==401) $("source-error").textContent = error.message; }
+    finally { busy($("connect-source"),false); }
+  });
+  async function discoverServices() {
+    if (topologyDirty && !window.confirm("Discard unsaved service and dependency changes and rediscover?")) return;
+    busy($("discover-services"),true); $("discovery-status").textContent = "Reading recent service metrics. You can keep using the workspace while discovery runs…";
+    try {
+      const result = await api("/v1/services/discover",{method:"POST"});
+      if (integration?.revision !== result.revision) { $("discovery-status").textContent = "The source changed during discovery. Reload configuration and try again."; return; }
+      discovery = result; topologyDirty = false; selectedServices = new Set(result.services.filter(service=>service.metric_kinds.length).map(service=>service.name));
+      dependencyDraft = result.dependencies.map(edge=>[...edge]);
+      $("independent-services").checked = result.topology_configured && !result.dependencies.length;
+      $("topology-status").textContent = ""; $("topology-error").textContent = "";
+      $("calibration-status").textContent = ""; $("calibration-error").textContent = "";
+      $("discovery-status").textContent = `${result.services.length} services found · checked ${fmtTime(result.checked_at)} · coverage reflects this window only.`;
+      renderServices(); renderDependencies();
+    } catch(error) { if(error.status!==401) $("discovery-status").textContent = error.message; }
+    finally { busy($("discover-services"),false); $("discover-services").disabled = !config?.prometheus; }
+  }
+  $("discover-services").addEventListener("click",discoverServices);
+  function renderServices() {
+    $("services-empty").hidden = !!discovery;
+    $("services-content").hidden = !discovery;
+    if (!discovery) return;
+    const query = $("service-search").value.trim().toLowerCase();
+    const rows = discovery.services.filter(service=>service.name.toLowerCase().includes(query));
+    $("coverage-warning").hidden = !discovery.resource_only && discovery.topology_configured;
+    $("coverage-warning").textContent = [discovery.resource_only ? "Only resource metrics are configured. Add latency and error queries to improve delay and failure coverage." : "", !discovery.topology_configured ? "No service dependencies have been confirmed. The default demo topology is not a discovery result; define your actual call relationships below." : ""].filter(Boolean).join(" ");
+    $("service-inventory").replaceChildren(h("div",{class:"table-wrap"},h("table",{},h("caption",{class:"sr"},"Discovered service metric coverage"),h("thead",{},h("tr",{},["Analyze","Service","Reporting metrics","Coverage","Missing metrics","Status"].map(title=>h("th",{scope:"col"},title)))),h("tbody",{},rows.map(service=>{
+      const percentage = Math.round(100 * Math.min(...discovery.metric_kinds.map(kind=>service.coverage[kind]?.coverage || 0)));
+      return h("tr",{},h("td",{},h("label",{class:"service-choice"},h("input",{type:"checkbox",checked:selectedServices.has(service.name),disabled:!service.metric_kinds.length,"aria-label":`Analyze ${service.name}`,onchange:event=>{if(event.target.checked) selectedServices.add(service.name); else selectedServices.delete(service.name); markTopologyDirty();}}))),h("td",{class:"mono"},service.name),h("td",{},service.metric_kinds.join(" · ") || "None"),h("td",{},`${percentage}%`),h("td",{},service.missing_kinds.join(" · ") || "None"),h("td",{},h("span",{class:`chip tone-${service.status === "reporting" ? "good" : "warn"}`},service.status === "reporting" ? "Reporting" : service.status === "gaps" ? "Data gaps" : "No recent data")));
+    })))));
+  }
+  $("service-search").addEventListener("input",renderServices);
+  $("select-reporting").addEventListener("click",()=>{if(discovery) { selectedServices = new Set(discovery.services.filter(service=>service.metric_kinds.length).map(service=>service.name)); markTopologyDirty(); renderServices(); }});
+  function renderDependencies() {
+    const names = discovery?.services.map(service=>service.name) || [];
+    function picker(value,index,side) {
+      const select = h("select",{"aria-label":`${side===0 ? "Caller" : "Callee"} for dependency ${index+1}`,onchange:event=>{dependencyDraft[index][side]=event.target.value; markTopologyDirty();}});
+      select.append(h("option",{value:""},side===0 ? "Choose caller" : "Choose callee"));
+      for(const name of new Set([...names,value].filter(Boolean))) select.append(h("option",{value:name,selected:name===value},name));
+      return select;
+    }
+    $("dependency-rows").replaceChildren(...dependencyDraft.map(([caller,callee],index)=>h("div",{class:"dependency-row"},picker(caller,index,0),h("span",{class:"dependency-arrow","aria-hidden":"true"},"→"),picker(callee,index,1),h("button",{class:"btn",type:"button","aria-label":`Remove dependency ${index+1}`,onclick:()=>{dependencyDraft.splice(index,1);markTopologyDirty();renderDependencies();}},"Remove"))));
+  }
+  $("add-dependency").addEventListener("click",()=>{dependencyDraft.push(["",""]); markTopologyDirty(); $("independent-services").checked=false;renderDependencies();});
+  $("independent-services").addEventListener("change",markTopologyDirty);
+  $("save-topology").addEventListener("click",async()=>{
+    $("topology-error").textContent=""; $("topology-status").textContent="";
+    if (!discovery || !selectedServices.size) { $("topology-error").textContent="Select at least one service with reporting metrics."; return; }
+    const independent = $("independent-services").checked, edges = independent ? [] : dependencyDraft;
+    if (!independent && !edges.length) { $("topology-error").textContent="Add the actual dependencies, or confirm that these services are independent."; return; }
+    if (independent && dependencyDraft.length) { $("topology-error").textContent="Remove dependency rows before confirming independent services."; return; }
+    if (edges.some(([a,b])=>!selectedServices.has(a) || !selectedServices.has(b) || a===b)) { $("topology-error").textContent="Each dependency must connect two different selected services."; return; }
+    busy($("save-topology"),true);
+    try {
+      const saved = await api("/v1/topology",{method:"POST",body:JSON.stringify({revision:discovery.revision,services:[...selectedServices],edges})});
+      topologyDirty=false;discovery.revision=saved.revision;discovery.topology_configured=true;discovery.dependencies=edges.map(edge=>[...edge]);
+      verified=null;config=await api("/v1/config");await loadIntegrations();renderMethods();renderServices();
+      $("topology-status").textContent="Services and dependencies saved. Load matching calibration below before diagnosing.";
+      $("calibration-confirm").checked=false;$("calibration-status").textContent="";
+    } catch(error) {if(error.status!==401) $("topology-error").textContent=error.message;}
+    finally {busy($("save-topology"),false);}
+  });
+  $("load-calibration").addEventListener("click",async()=>{
+    $("calibration-error").textContent="";const file=$("calibration-file").files[0];
+    if (topologyDirty) {$("calibration-error").textContent="Save your service and dependency changes first.";return;}
+    if (!discovery?.topology_configured) {$("calibration-error").textContent="Save your selected services and dependencies first.";return;}
+    if (!file || file.size>4*1024*1024) {$("calibration-error").textContent="Choose a calibration JSON file smaller than 4 MB.";return;}
+    if (!$("calibration-confirm").checked) {$("calibration-error").textContent="Confirm that this calibration matches the current telemetry and dependencies.";return;}
+    busy($("load-calibration"),true);
+    try {
+      const calibration=JSON.parse(await file.text());
+      const result=await api("/v1/calibration",{method:"POST",body:JSON.stringify({revision:discovery.revision,calibration})});
+      config=await api("/v1/config");await loadIntegrations();renderMethods();
+      $("calibration-status").textContent=`Ready to diagnose with ${result.methods.map(method=>method.toUpperCase()).join(" and ")}.`;
+    } catch(error) {if(error.status!==401) $("calibration-error").textContent=error instanceof SyntaxError ? "The calibration file is not valid JSON." : error.message;}
+    finally {busy($("load-calibration"),false);}
+  });
+  configureProvider();
+
   /* ---------- sign in / out ---------- */
   function showSignin(message) {
+    $("shell").hidden = true;
     $("console").hidden = true; $("signout").hidden = true; $("signin").hidden = false;
     $("signin-error").textContent = message || "";
     $("key").value = ""; $("key").focus();
   }
   function signOut(message) {
-    clearTimeout(pollTimer); key = null; store.clear(); config = null; jobs = []; selected = null;
+    clearTimeout(pollTimer); sessionVersion++; refreshSequence++; key = null; store.clear(); config = null; jobs = []; selected = null; integration = null; verified = null; renderedJobs = null; discovery = null; selectedServices.clear(); topologyDirty = false; renderServices();
+    $("job-search").value = ""; $("job-status").value = "all";
+    $("service-search").value = ""; $("started").value = "";
+    $("calibration-file").value = ""; $("calibration-confirm").checked = false;
+    for (const id of ["discovery-status", "topology-status", "topology-error", "calibration-status", "calibration-error", "prom-check-result", "source-error", "source-success"]) $(id).textContent = "";
+    $("new-form").hidden = true; $("new-btn").setAttribute("aria-expanded", "false");
     history.replaceState(null, "", location.pathname);
     showSignin(message);
   }
@@ -521,11 +998,13 @@
       $("signin-error").textContent = e.message;
       return false;
     }
-    $("signin").hidden = true; $("console").hidden = false; $("signout").hidden = false;
+    $("signin").hidden = true; $("console").hidden = false; $("shell").hidden = false; $("signout").hidden = false;
     renderMethods();
     selected = location.hash.slice(1) || null;
-    await refresh();
-    if (!selected && jobs.length) select(jobs[0].id, false);
+    navigate(selected ? "diagnoses" : new URLSearchParams(location.search).get("view") || "overview");
+    await Promise.all([refresh(), loadIntegrations()]);
+    if (!key) return false;
+    if (!selected && jobs.length) { selected = jobs[0].id; renderList(); renderDetail(); }
     return true;
   }
 
@@ -533,11 +1012,11 @@
     e.preventDefault();
     const value = $("key").value.trim();
     if (!value) return ($("signin-error").textContent = "Enter your API key.");
-    key = value; $("signin-btn").disabled = true; $("signin-error").textContent = "";
-    if (await start() === true) store.set(value, $("remember").checked);
-    $("signin-btn").disabled = false;
+    key = value; busy($("signin-btn"), true); $("signin-error").textContent = "";
+    if (await start() === true) { store.clear(); store.set(value, $("remember").checked); }
+    busy($("signin-btn"), false);
   });
-  window.addEventListener("hashchange", () => { const id = location.hash.slice(1); if (id && id !== selected) select(id, false); });
+  window.addEventListener("hashchange", () => { const id = location.hash.slice(1); if (key && id && id !== selected) { select(id, false); refresh(); } });
 
   if (key) start(); else showSignin("");
 })();
