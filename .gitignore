@@ -15,8 +15,23 @@ lab/.state/
 lab/vendor/
 tmp/
 runtime/.state/
+.env
+backups/
+compose.secrets.yaml
 
 # Project documents stay local (not published)
 *.pdf
 *.docx
 docs/readiness/
+
+# e2e acceptance run artifacts
+e2e/state/
+e2e/shots/
+e2e/incident.txt
+e2e/*.log
+e2e/*.pid
+e2e/*.db
+e2e/export.json
+
+# Direct provider credential files (outside the default ignored state directory)
+credentials/

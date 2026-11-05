@@ -8,7 +8,7 @@ COPY corca ./corca
 COPY scripts ./scripts
 COPY runtime ./runtime
 RUN pip install --no-cache-dir --no-deps .
-RUN chmod -R a+rX corca scripts runtime && useradd --uid 10001 --create-home corca && mkdir -p runtime/.state && chown -R corca:corca runtime/.state
+RUN chmod -R a+rX corca scripts runtime && useradd --uid 10001 --create-home corca && mkdir -p runtime/.state /var/lib/corca && chown -R corca:corca runtime/.state /var/lib/corca
 USER 10001
 EXPOSE 8000
 CMD ["python", "-m", "runtime.api", "--host", "0.0.0.0", "--port", "8000"]

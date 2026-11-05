@@ -1,7 +1,6 @@
 """Read-only provider adapters. Source files hold environment-variable names, never keys."""
 import json
 import math
-import os
 import re
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -12,6 +11,7 @@ import requests
 
 from corca.topology import metric_column, raw_service_of
 from runtime.prometheus import fetch_window as prometheus_window, validate_source as validate_prometheus
+from runtime.credentials import credential_value
 
 PROVIDERS = ("prometheus", "grafana", "datadog", "dynatrace", "newrelic")
 PROMETHEUS = ("prometheus", "grafana")
@@ -88,7 +88,7 @@ def load_source(path):
 
 def secret(source, field):
     name = source.get(field)
-    value = os.getenv(name, "") if name else ""
+    value = credential_value(source, name)
     if not value:
         raise ValueError(f"Set the {name or field} environment variable on the CoRCA server")
     return value

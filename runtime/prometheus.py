@@ -5,13 +5,13 @@ Every query must return one series per service, labelled with `service_label`.
 """
 import json
 import math
-import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import requests
 from corca.topology import metric_column
+from runtime.credentials import credential_value
 
 
 def validate_source(source):
@@ -55,7 +55,7 @@ def fetch_window(source, start, end):
     data = {"time": grid}
     auth = {}
     if source.get("token_env"):
-        token = os.getenv(source["token_env"], "")
+        token = credential_value(source, source["token_env"])
         if not token:
             raise ValueError(f"Set {source['token_env']} on the CoRCA server")
         auth = ({"auth": (source["username"], token)} if source.get("username")

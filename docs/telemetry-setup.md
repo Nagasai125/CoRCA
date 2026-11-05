@@ -6,25 +6,47 @@ instrumentation; you do not need to enter a business API key for every service.
 
 ## In the workspace
 
-1. Open **Integrations**, choose a provider, and enter its historical query endpoint.
+1. Open **Integrations** and select a provider card. Enter its query endpoint,
+   or choose a region for Datadog/New Relic. Only that provider’s form is shown.
 2. Adapt the example queries to your actual metrics and service label/dimension.
    Every metric query must return one series per service.
-3. For authenticated sources, enter the **name** of a credential environment variable,
-   such as `CORCA_TELEMETRY_DATADOG_API_KEY`. An administrator sets the secret value
-   in the server environment or deployment secret. Never put the value in the form,
-   source JSON, query URL, or browser storage.
-4. Choose **Connect & discover services**. Discovery lists services, per-metric
+3. Enter the provider's API key/token directly. Grafana also needs its Metrics
+   instance ID; Datadog needs both API and application keys; New Relic needs its
+   account ID. Datadog and New Relic use a region selector. Prometheus supports
+   optional bearer tokens or basic-auth username/password. These are API
+   connections, not OAuth sign-in with a provider account.
+   The advanced environment-variable option remains available.
+4. Choose **Verify & connect**. CoRCA verifies metrics before replacing the saved
+   connection. Failed verification keeps the existing connection. Discovery lists services, per-metric
    observed coverage, and missing configured metrics. It does not install agents
    or infer call relationships from metric names.
 5. On **Services**, select the reporting services to analyze, define caller → callee
    pairs, and save. For independent services, explicitly confirm an empty graph.
-6. Upload a current CoRCA calibration artifact fitted to the same queries,
-   resolution, service scope, and dependencies. Confirm the match before loading.
-   Then start a diagnosis or configure the Alertmanager receiver.
+6. Set investigation sensitivity to enable BARO with an explicitly manual threshold.
+   Start with 6 and review findings against your dashboards. No new collection is
+   required. Alternatively upload an existing compatible calibration artifact fitted
+   to the same queries, resolution, service scope, and dependencies. Then start a
+   diagnosis or configure the Alertmanager receiver.
 
 CoRCA validates calibration values and algorithm policies. The administrator is
 responsible for verifying that the artifact was collected from the stated
 telemetry; uploading an unrelated artifact is not valid environment calibration.
+
+## Direct credential storage
+
+Directly entered secret values are stored in owner-only JSON files (0600) under
+`credentials/` (0700), beside the workspace database. The default Docker volume
+keeps this directory at `/var/lib/corca/credentials`. The application does not
+provide encryption at rest; protect the volume using your host/disk controls.
+Use HTTPS for remote browser access and remote authenticated telemetry endpoints.
+
+Passwords/API keys are never returned in metadata, stored in browser storage,
+written into SQLite, or included in source downloads. Exported source files use
+server-variable placeholders; provide secrets separately when reusing them.
+Verification runs read-only queries against the configured, allowed endpoint.
+Old credential files remain for queued diagnoses using their original connection.
+Back up these files separately from SQLite, or reconnect providers after restore.
+Do not delete old files while queued/running jobs still reference them.
 
 ## Provider requirements
 
@@ -73,8 +95,8 @@ and [OpenTelemetry/Prometheus integration](https://opentelemetry.io/docs/compati
 
 - Start with a persistent job database (`--db`, default
   `runtime/.state/corca.db`). Browser-managed connections, selected services,
-  dependencies, and thresholds persist in SQLite. Secret **values** are resolved
-  from server environment variables when querying; they are not persisted there.
+  dependencies, and thresholds persist in SQLite. Secret **values** are resolved from private credential files or server environment
+  variables when querying; they are not persisted in SQLite.
 - Existing `--source` and `--calibration` files bootstrap a deployment. Once a
   connection has been saved through the workspace, the saved connection and its
   calibration take precedence on restart. Manage subsequent changes in the UI.
@@ -83,16 +105,15 @@ and [OpenTelemetry/Prometheus integration](https://opentelemetry.io/docs/compati
   variable `CORCA_ALLOWED_SOURCE_HOSTS`. Loopback hosts and recognized supported
   SaaS API hosts are allowed by default. Redirects are disabled to avoid forwarding
   credentials to another endpoint. Use HTTPS for remote sources.
-- Saving a source or topology clears the active calibration. Upload matching
-  calibration afterward. Each newly queued diagnosis snapshots its source and
+- Saving a source or topology clears the active sensitivity settings. Set manual
+  sensitivity or upload matching existing calibration afterward. Each newly queued diagnosis snapshots its source and
   thresholds, so later connection changes do not change that job's configuration.
   Credential rotation still uses the current value of its server variable.
 - Existing pending jobs are bound to the startup configuration when migrating
   an older database. Existing history is retained; the new SQLite column and
   settings table are added in place.
-- This is still a shared-key workspace. Any key holder can change the connection
-  or calibration. Keep it within a trusted team/access gateway; per-user roles,
-  SSO, and an actor-attributed audit trail remain separate enterprise work.
+- This is a shared workspace with direct access by default. Anyone who can reach
+  the deployment can change its settings. Enable named accounts under Team & access before sharing it. Administrators manage setup, responders investigate, and configuration changes have actor-attributed activity. SSO, MFA, and tenant isolation remain unavailable.
 - The diagnosis input limit is 199 metric columns plus time. Narrow service scope
   or queries for larger fleets. Discovery visibility is limited to what the
   configured queries and provider return; it is not a complete infrastructure
@@ -106,3 +127,7 @@ The full local browser workflow also runs against an HTTP Prometheus fixture and
 executes the actual diagnosis worker. These checks do not establish live SaaS
 connectivity: verify each customer's keys, region, query schema, reporting
 resolution, historical retention, and alert delivery in that environment.
+
+For standard Docker deployment, credential overrides, queue limits, and backup/restore,
+see [the operations guide](operations.md). Readiness now checks application storage
+independently of sensitivity setup so fresh installations can reach onboarding.

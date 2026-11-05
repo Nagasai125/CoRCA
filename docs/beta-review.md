@@ -1,3 +1,8 @@
+> This is the October 27 review. The October 29 beta adds standard Compose
+> startup, manual sensitivity, queue limits, cancellation, and workspace
+> backup/restore. Current setup is in [README](../README.md) and
+> [operations](operations.md). Calibration is now optional for BARO beta use.
+
 # CoRCA beta review — October 27, 2026
 
 The recent API and console changes provide a useful foundation for a self-hosted,

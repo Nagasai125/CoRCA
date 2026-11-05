@@ -1,0 +1,17 @@
+{
+  "evidence_kind": "controlled_drill",
+  "cases": [
+    {
+      "incident_id": "replace-with-confirmed-fault-incident-id",
+      "method": "baro",
+      "diagnosis": "exports/fault.json",
+      "root_causes": ["replace-with-confirmed-service"]
+    },
+    {
+      "incident_id": "replace-with-independent-healthy-window-id",
+      "method": "baro",
+      "diagnosis": "exports/healthy.json",
+      "root_causes": []
+    }
+  ]
+}

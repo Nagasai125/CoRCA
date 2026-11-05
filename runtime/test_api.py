@@ -28,7 +28,7 @@ def test_authentication_and_health():
         assert client.get("/v1/config", headers={"X-API-Key": TOKEN}).json() == {
             "methods": [], "prometheus": False, "alert_method": None}
         assert client.post("/diagnose", json=payload()).status_code == 401
-        assert client.get("/readyz").status_code == 503  # not ready without calibration
+        assert client.get("/readyz").status_code == 200  # onboarding must be reachable before configuration
         assert client.get("/openapi.json").status_code == 401
     with TestClient(create_app(TOKEN, {"baro": 6.0})) as client:
         assert client.get("/readyz").status_code == 200
