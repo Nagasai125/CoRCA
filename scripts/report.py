@@ -1,7 +1,7 @@
 """Final RQ1/RQ2 tables from finished result folders.
 
 Each folder must hold summary.csv + calibration.json + runs.jsonl (scripts.summarize)
-or diagnoses.jsonl (runtime.evaluate). Writes to --out:
+or diagnoses.jsonl (lab.evaluate). Writes to --out:
   rq_tables.csv     P/R/F1/exact with 95% bootstrap CIs over incidents, per approach
   paired_diffs.csv  CoRCA F1 minus each top-k baseline, paired by incident, with CI
   sensitivity.csv   CoRCA F1/exact at tau x {0.5..2} and max_rounds 1..3 (ablation)

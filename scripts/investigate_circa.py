@@ -98,8 +98,8 @@ def analyze(folder, policy, dataset):
     random.seed(0)
     np.random.seed(0)
     if dataset == "re2-ob":
-        from runtime.api import Incident, prepare_window
-        from runtime.client import incident_payload
+        from backend.api import Incident, prepare_window
+        from lab.client import incident_payload
 
         incident = Incident(**incident_payload(folder, method="circa"))
         df, dropped, _ = prepare_window(incident)
@@ -181,7 +181,7 @@ def main():
         args.out.mkdir(parents=True, exist_ok=False)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
-    source = [p for base in ("corca", "scripts", "runtime") for p in Path(base).glob("*.py")]
+    source = [p for base in ("corca", "scripts", "backend", "lab") for p in Path(base).glob("*.py")]
     package = metadata.distribution("RCAEval")
     policies = list(dict.fromkeys(args.policies))
     manifest = {"scope": "development_only_not_held_out", "policies": policies,

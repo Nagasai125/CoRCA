@@ -7,17 +7,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen --extra dev --extra server
-      # Same pins as the API image (runtime/Dockerfile); RCAEval without its heavy extras.
-      - run: uv pip install --no-deps --require-hashes -r runtime/rcaeval.lock
+      # Same pins as the API image (backend/Dockerfile); RCAEval without its heavy extras.
+      - run: uv pip install --no-deps --require-hashes -r backend/rcaeval.lock
       - id: python_tests
-        run: uv run --no-sync python -m pytest -q tests runtime --junitxml=results/ci-tests.xml
+        run: uv run --no-sync python -m pytest -q tests --junitxml=results/ci-tests.xml
         env: {PYTHONPATH: ., OPENBLAS_NUM_THREADS: "1", OMP_NUM_THREADS: "1"}
-      - run: node --test tests/console-navigation.test.cjs tests/console-html.test.cjs
+      - run: node --test tests/*.test.cjs
+      - name: Check production package boundary
+        run: |
+          uv build --wheel
+          uv run --no-sync python e2e/check_distribution.py dist/*.whl
       - name: Prepare customer-visible software-check evidence
         if: always()
         run: |
           if [ -f results/ci-tests.xml ]; then
-            uv run --no-sync python -m runtime.quality junit \
+            uv run --no-sync python -m backend.quality junit \
               --input results/ci-tests.xml --out results/quality-summary.json \
               --run-key "github:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:python-tests" \
               --name "Python software checks" \
@@ -40,7 +44,7 @@ jobs:
           CORCA_EVALUATION_TOKEN: ${{ secrets.CORCA_EVALUATION_TOKEN }}
         run: |
           if [ -n "$CORCA_QUALITY_URL" ] && [ -n "$CORCA_EVALUATION_TOKEN" ] && [ -f results/quality-summary.json ]; then
-            uv run --no-sync python -m runtime.quality publish --report results/quality-summary.json --url "$CORCA_QUALITY_URL"
+            uv run --no-sync python -m backend.quality publish --report results/quality-summary.json --url "$CORCA_QUALITY_URL"
           else
             echo "CoRCA publication is not configured or no evaluation summary is available."
           fi
@@ -51,13 +55,14 @@ jobs:
       - run: docker compose up -d --build --wait --wait-timeout 180
       - name: Check fresh workspace onboarding
         run: |
+          docker compose exec -T corca python -c 'import importlib.util; from pathlib import Path; assert all(importlib.util.find_spec(name) is None for name in ("lab", "scripts", "tests", "e2e")); assert not list(Path("backend").glob("test_*.py"))'
           curl --fail http://localhost:8000/readyz
           curl --fail http://localhost:8000/app -o /tmp/console.html
           grep -q 'Set investigation sensitivity' /tmp/console.html
           curl --fail http://localhost:8000/v1/config
           ! grep -q 'id="signin-form"' /tmp/console.html
       - name: Exercise isolated workspace recovery
-        run: docker compose exec -T corca python -m runtime.pilot recovery --db /var/lib/corca/corca.db --work-dir /tmp/pilot-drill --out /tmp/pilot-recovery.json
+        run: docker compose exec -T corca python -m backend.pilot recovery --db /var/lib/corca/corca.db --work-dir /tmp/pilot-drill --out /tmp/pilot-recovery.json
       - if: failure()
         run: docker compose logs --tail=100
       - if: always()

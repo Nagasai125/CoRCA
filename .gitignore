@@ -14,7 +14,7 @@ data/
 lab/.state/
 lab/vendor/
 tmp/
-runtime/.state/
+backend/.state/
 .env
 backups/
 compose.secrets.yaml

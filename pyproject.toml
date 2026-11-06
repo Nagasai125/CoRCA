@@ -24,14 +24,14 @@ dev = ["pytest>=8,<9", "httpx>=0.27,<1"]  # httpx: FastAPI TestClient
 server = ["fastapi==0.143.0", "uvicorn==0.54.0"]
 
 [project.scripts]
-corca-run = "scripts.run_eval:main"
-corca-summarize = "scripts.summarize:main"
-corca-demo = "scripts.demo_synthetic:main"
-corca-serve = "runtime.api:main"
-corca-admin = "runtime.admin:main"
+corca-serve = "backend.api:main"
+corca-admin = "backend.admin:main"
 
 [tool.setuptools.packages.find]
-include = ["corca*", "scripts*", "runtime*"]
+include = ["corca", "backend", "frontend", "frontend.fonts"]
 
 [tool.setuptools.package-data]
-runtime = ["web/*.html", "web/*.json"]
+frontend = ["*.html", "*.json", "*.js", "*.css", "fonts/*.woff", "fonts/*-OFL.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

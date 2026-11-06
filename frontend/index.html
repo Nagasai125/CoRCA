@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CoRCA</title>
+<meta name="description" content="Investigate concurrent microservice faults with telemetry-backed root-cause analysis.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f8fb; --surface: #ffffff; --ink: #14213d; --ink-2: #4a5468; --line: #d9dfe8;
+    --fault: #d93a3f; --fault-tint: #fbe3e3; --root: #195fba; --root-tint: #dbe9fa;
+    --quiet: #eef1f5; --quiet-ink: #8a94a6;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --code-bg: #14213d; --code-ink: #e8edf5;
+    --radius: 10px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1626; --surface: #172036; --ink: #edf1f7; --ink-2: #a9b3c4; --line: #2c3850;
+      --fault: #f0646a; --fault-tint: #4a2028; --root: #5598e7; --root-tint: #1f3658;
+      --quiet: #1d2740; --quiet-ink: #6f7b91;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --code-bg: #0a101d; --code-ink: #dbe3ef;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.6 "Google Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; font-optical-sizing: auto;
+  }
+  a { color: var(--root); }
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible, summary:focus-visible {
+    outline: 3px solid var(--root); outline-offset: 3px; border-radius: 4px;
+  }
+  code, pre { font-family: ui-monospace, Menlo, monospace; font-size: .86em; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  /* top bar */
+  header.top { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 5; }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 16px; }
+  .brand { font-weight: 600; font-size: 18px; color: var(--ink); text-decoration: none; display: flex; gap: 10px; align-items: center; }
+  .brand svg { width: 22px; height: 22px; }
+  nav { display: flex; gap: 4px; }
+  nav a { color: var(--ink-2); text-decoration: none; font-size: 15px; padding: 10px 12px; border-radius: 8px; min-height: 44px; display: inline-flex; align-items: center; }
+  nav a:hover { color: var(--ink); background: var(--quiet); }
+
+  /* hero */
+  .hero { padding: 64px 0 72px; }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; align-items: center; }
+  h1 { font-size: clamp(36px, 5vw, 56px); line-height: 1.08; letter-spacing: -.02em; font-weight: 600; margin: 0 0 20px; }
+  .lede { font-size: 19px; color: var(--ink-2); max-width: 34em; margin: 0 0 32px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 22px;
+    border-radius: 999px; font: inherit; font-size: 16px; font-weight: 500; text-decoration: none; cursor: pointer;
+    border: 1px solid transparent; transition: background-color .15s, border-color .15s;
+  }
+  .btn.primary { background: var(--ink); color: var(--bg); }
+  .btn.primary:hover { background: var(--root); }
+  .btn.secondary { border-color: var(--line); color: var(--ink); background: transparent; }
+  .btn.secondary:hover { border-color: var(--ink-2); }
+
+  .stage { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 20px 16px; }
+  .stage svg.graph { width: 100%; height: auto; display: block; }
+  .edge { stroke: var(--line); stroke-width: 1.5; transition: stroke .5s; }
+  .edge.hot { stroke: var(--fault); stroke-width: 2; }
+  .node circle { fill: var(--surface); stroke: var(--line); stroke-width: 2; transition: fill .5s, stroke .5s; }
+  .node text { fill: var(--ink-2); font-size: 13px; text-anchor: middle; transition: fill .5s; }
+  .node .badge { opacity: 0; transition: opacity .4s; }
+  .node .badge rect { fill: var(--root); }
+  .node .badge text { fill: var(--surface); font-size: 11px; font-weight: 600; }
+  .node[data-state="anomalous"] circle { fill: var(--fault); stroke: var(--fault); animation: pulse 1.4s ease-in-out infinite; }
+  .node[data-state="symptom"] circle { fill: var(--fault-tint); stroke: var(--fault); }
+  .node[data-state="root"] circle { fill: var(--root); stroke: var(--root); }
+  .node[data-state="root"] text.name { fill: var(--ink); font-weight: 600; }
+  .node[data-state="root"] .badge { opacity: 1; }
+  .node[data-state="explained"] circle { fill: var(--quiet); stroke: var(--quiet-ink); stroke-dasharray: 4 3; }
+  @keyframes pulse { 50% { stroke-width: 8; stroke-opacity: .35; } }
+
+  .caption { min-height: 3.2em; margin: 12px 4px 4px; color: var(--ink); font-size: 15px; }
+  .stage-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+  .key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); }
+  .key span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 2px solid; }
+  .key .k-fault::before { background: var(--fault); border-color: var(--fault); }
+  .key .k-sym::before { background: var(--fault-tint); border-color: var(--fault); }
+  .key .k-root::before { background: var(--root); border-color: var(--root); }
+  .key .k-exp::before { background: var(--quiet); border-color: var(--quiet-ink); border-style: dashed; }
+  .replay { font: inherit; font-size: 14px; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 999px; min-height: 36px; padding: 0 14px; cursor: pointer; white-space: nowrap; }
+  .replay:hover { border-color: var(--ink-2); }
+
+  /* sections */
+  section.band { padding: 88px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(28px, 3.4vw, 38px); line-height: 1.15; letter-spacing: -.015em; font-weight: 600; margin: 0 0 16px; }
+  .intro { color: var(--ink-2); max-width: 38em; margin: 0 0 40px; }
+
+  .steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; counter-reset: s; }
+  .steps li { counter-increment: s; border-top: 2px solid var(--line); padding-top: 18px; transition: border-color .4s; }
+  .steps li::before { content: counter(s); display: block; font-size: 15px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; transition: color .4s; }
+  .steps li.on { border-color: var(--root); }
+  .steps li.on::before { color: var(--root); }
+  .steps h3 { font-size: 18px; margin: 0 0 6px; font-weight: 600; }
+  .steps p { margin: 0; color: var(--ink-2); font-size: 15px; }
+
+  .results { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 56px; align-items: start; }
+  .connect { display: grid; gap: 40px; }
+  .connect ol { list-style: none; counter-reset: c; padding: 0; margin: 0; display: grid; gap: 40px; }
+  .connect li { counter-increment: c; display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 56px; align-items: start; }
+  .connect li h3 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+  .connect li h3::before { content: counter(c) ". "; color: var(--ink-2); font-weight: 500; }
+  .connect li p { margin: 0; color: var(--ink-2); font-size: 16px; }
+  pre { margin: 0; background: var(--code-bg); color: var(--code-ink); padding: 18px 20px; border-radius: var(--radius); overflow-x: auto; line-height: 1.55; }
+  pre .c { color: #8c9ab3; }
+
+  footer { border-top: 1px solid var(--line); padding: 40px 0 56px; color: var(--ink-2); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 32px; justify-content: space-between; }
+  footer p { margin: 0; max-width: 44em; }
+
+  @media (max-width: 900px) {
+    .hero .wrap, .results, .connect li { grid-template-columns: 1fr; gap: 32px; }
+    .steps { grid-template-columns: repeat(2, 1fr); }
+    nav a.opt { display: none; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 0 16px; }
+    .node text { font-size: 20px; }          /* SVG scales down ~2x on phones */
+    .node .badge text { font-size: 15px; }
+    .hero { padding: 40px 0 56px; }
+    .steps { grid-template-columns: 1fr; gap: 24px; }
+    section.band { padding: 64px 0; }
+    .stage-foot { flex-direction: column; align-items: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  :root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --motion-fast: 140ms; --motion-enter: 200ms; }
+  .btn, .replay { transition: transform var(--motion-fast) var(--ease-out), background-color var(--motion-fast) ease, border-color var(--motion-fast) ease; }
+  .btn:active:not(:disabled):not(:focus-visible), .replay:active:not(:focus-visible) { transform: scale(.98); }
+  @media (hover: hover) and (pointer: fine) {
+    .btn:not(:disabled):hover, .replay:hover { transform: translateY(-1px); }
+    .btn:active:not(:disabled):not(:focus-visible), .replay:active:not(:focus-visible) { transform: scale(.98); }
+  }
+
+  .hero .wrap > div, .hero .stage { transition: opacity 400ms var(--ease-out), transform 400ms var(--ease-out); }
+  .hero .stage { box-shadow: 0 16px 48px -28px rgba(20,33,61,.3); }
+  @starting-style {
+    body:not([data-input="keyboard"]) .hero .wrap > div,
+    body:not([data-input="keyboard"]) .hero .stage { opacity: 0; transform: translateY(12px); }
+  }
+
+  /* Keyboard commands remain immediate, including transitions already in flight. */
+  html:has(body[data-input="keyboard"]) { scroll-behavior: auto; }
+  body[data-input="keyboard"] *, body[data-input="keyboard"] *::before, body[data-input="keyboard"] *::after {
+    transition: none !important; animation: none !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    html { scroll-behavior: auto; }
+  }
+
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="CoRCA home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="5" cy="19" r="3" fill="#2a78d6"/><circle cx="19" cy="19" r="3" fill="#2a78d6"/><path d="M10.5 7.5 6.5 16.5M13.5 7.5l4 9" stroke="currentColor" stroke-width="2"/></svg>
+      CoRCA
+    </a>
+    <nav aria-label="Page sections">
+      <a href="#how" class="opt">How it works</a>
+      <a href="#workspace" class="opt">Workspace</a>
+      <a href="#connect" class="opt">Connect</a>
+      <a href="/app">Open console</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <div>
+        <h1 id="hero-title">When services fail together, investigate the root causes.</h1>
+        <p class="lede">Connect service metrics from Prometheus, Grafana Cloud, Datadog, Dynatrace, or New Relic. CoRCA ranks candidate root causes, explains their symptoms, and looks for faults that remain.</p>
+        <div class="actions">
+          <a class="btn primary" href="/app?view=integrations">Connect your workspace</a>
+          <a class="btn secondary" href="#how">See how it works</a>
+        </div>
+      </div>
+
+      <figure class="stage" aria-labelledby="stage-caption" style="margin:0">
+        <svg class="graph" id="graph" viewBox="0 0 660 414" role="img" aria-label="Online Boutique service graph replaying a two-fault incident"></svg>
+        <p class="caption" id="stage-caption" aria-live="polite"></p>
+        <div class="stage-foot">
+          <div class="key" aria-hidden="true">
+            <span class="k-fault">faulty</span><span class="k-sym">symptom</span><span class="k-root">root cause found</span><span class="k-exp">explained</span>
+          </div>
+          <button class="replay" id="replay" type="button">Replay</button>
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band" id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <h2 id="how-title">Explain away, then look again</h2>
+      <p class="intro">A slow service makes everything that calls it look slow too. Most tools return the single most suspicious service and stop. CoRCA repeats the search on whatever its first answer cannot explain.</p>
+      <ol class="steps" id="steps">
+        <li><h3>Detect anomalies</h3><p>Compare each metric after the alert with the minutes before it.</p></li>
+        <li><h3>Rank the strongest root</h3><p>The ranking engine identifies a candidate cause from your service metrics.</p></li>
+        <li><h3>Explain away its callers</h3><p>Symptoms that service can cause upstream are set aside. Callers' own CPU and memory stay in play.</p></li>
+        <li><h3>Repeat until nothing is left</h3><p>Stop when no remaining anomaly clears your configured threshold, after at most three rounds.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band" id="workspace" aria-labelledby="workspace-title">
+    <div class="wrap results"><div><h2 id="workspace-title">An investigation your team can follow</h2><p class="intro">Keep incident evidence and candidate causes together, from the first alert to your next action.</p><a class="btn primary" href="/app">Open your workspace →</a></div><ol class="steps"><li><h3>Review the evidence</h3><p>See candidate causes, explained symptoms, missing metrics, and anomalies that still need attention.</p></li><li><h3>Keep a shared history</h3><p>Search recent diagnoses, share diagnosis links, and export results for your incident notes.</p></li><li><h3>Stay in control</h3><p>Start from an incident time or Alertmanager notification. Cancel queued work and revisit completed investigations.</p></li></ol></div>
+  </section>
+
+  <section class="band" id="connect" aria-labelledby="connect-title">
+    <div class="wrap connect">
+      <div>
+        <h2 id="connect-title">Connect it in three steps</h2>
+        <p class="intro" style="margin:0">Connect your existing monitoring platform once. Then review metric coverage and dependencies for the services you want to investigate.</p>
+      </div>
+      <ol>
+        <li><div><h3>Connect your telemetry</h3><p>Choose a provider and its query endpoint in Setup → Connect & verify. Use read-only provider credentials, stored on the CoRCA server.</p></div><pre><code>Prometheus · Grafana Cloud Metrics
+Datadog · Dynatrace · New Relic
+
+<span class="c"># One active source per deployment</span></code></pre></li>
+        <li><div><h3>Confirm your services</h3><p>Discover reporting services, check missing metrics, and select your scope. Define who calls whom using the service IDs returned by your queries.</p></div><pre><code>frontend → checkout → payments
+
+<span class="c"># Review real service dependencies
+# CoRCA does not infer them from metric names</span></code></pre></li>
+        <li><div><h3>Set sensitivity and investigate</h3><p>Set a manual investigation threshold, or load existing environment calibration. Choose an incident time, review the evidence, and optionally route Alertmanager notifications to start diagnoses.</p></div><pre><code>Metric coverage → dependencies
+Sensitivity → diagnosis → evidence
+
+<span class="c"># Share a diagnosis link or export the result</span></code></pre></li>
+      </ol>
+    </div>
+    <div class="wrap" style="margin-top:32px"><a class="btn primary" href="/app?view=integrations">Open integration setup →</a><p class="intro" style="margin-top:16px">Self-hosted beta for trusted teams. Open the workspace directly. Use a private network or access gateway when sharing with your team; enable individual accounts and roles before sharing.</p></div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>CoRCA is a self-hosted beta for trusted teams. Findings are investigation leads; score shares compare anomalies and are not probabilities. Confirm evidence before taking action.</p>
+    <a href="https://github.com/Nagasai125/CoRCA">Source on GitHub</a>
+  </div>
+</footer>
+
+<script>
+(() => {
+  document.addEventListener("pointerdown", () => { document.body.dataset.input = "pointer"; }, {passive: true});
+  document.addEventListener("keydown", () => { document.body.dataset.input = "keyboard"; });
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- explain-away replay: Online Boutique topology (corca/topology.py) ---------- */
+  const nodes = {
+    frontend: [330, 48], checkout: [190, 168], recommendation: [520, 168],
+    ad: [40, 290], currency: [135, 290], payment: [230, 290], email: [325, 290],
+    shipping: [420, 290], catalog: [515, 290], cart: [610, 290], redis: [610, 372],
+  };
+  const edges = [ // caller -> callee
+    ["frontend", "ad"], ["frontend", "cart"], ["frontend", "checkout"], ["frontend", "currency"],
+    ["frontend", "catalog"], ["frontend", "recommendation"], ["frontend", "shipping"],
+    ["checkout", "cart"], ["checkout", "currency"], ["checkout", "email"], ["checkout", "payment"],
+    ["checkout", "catalog"], ["checkout", "shipping"], ["recommendation", "catalog"], ["cart", "redis"],
+  ];
+  // Replayed from the held-out lab incident currencyservice_cpu + adservice_cpu (BARO round order).
+  const timeline = [
+    { step: 0, text: "Healthy traffic across 11 services.", set: {} },
+    { step: 1, text: "Two faults start: CPU saturation in adservice and currencyservice. The services that call them slow down too.",
+      set: { ad: "anomalous", currency: "anomalous", frontend: "symptom", checkout: "symptom" } },
+    { step: 2, text: "Round 1: the ranker picks adservice as the strongest root cause.", set: { ad: "root" }, badge: { ad: "root 1" } },
+    { step: 3, text: "Its caller, frontend, is explained, so those symptoms are set aside.", set: { frontend: "explained" } },
+    { step: 2, text: "Round 2: currencyservice is the strongest anomaly left.", set: { currency: "root" }, badge: { currency: "root 2" } },
+    { step: 3, text: "checkoutservice is explained too.", set: { checkout: "explained" } },
+    { step: 4, text: "Nothing unexplained is left, so CoRCA stops: adservice and currencyservice. A single-answer tool would have stopped at adservice.", set: {} },
+  ];
+
+  const svg = document.getElementById("graph");
+  const ns = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent) => {
+    const e = document.createElementNS(ns, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    parent.appendChild(e);
+    return e;
+  };
+  const edgeEls = edges.map(([a, b]) => {
+    const [x1, y1] = nodes[a], [x2, y2] = nodes[b];
+    return { a, b, line: el("line", { x1, y1, x2, y2, class: "edge" }, svg) };
+  });
+  const nodeEls = {};
+  for (const [name, [x, y]] of Object.entries(nodes)) {
+    const g = el("g", { class: "node", "data-state": "normal" }, svg);
+    el("circle", { cx: x, cy: y, r: 13 }, g);
+    el("text", { x, y: y + 31, class: "name" }, g).textContent = name;
+    const badge = el("g", { class: "badge" }, g);
+    el("rect", { x: x - 25, y: y - 40, width: 50, height: 19, rx: 9.5 }, badge);
+    el("text", { x, y: y - 26.5 }, badge);
+    nodeEls[name] = g;
+  }
+
+  const caption = document.getElementById("stage-caption");
+  const stepItems = [...document.querySelectorAll("#steps li")];
+  const caller = (s) => s === "symptom";
+  const fault = (s) => s === "anomalous" || s === "root";
+
+  function render(state, badges, frame) {
+    for (const [name, g] of Object.entries(nodeEls)) {
+      g.dataset.state = state[name] || "normal";
+      g.querySelector(".badge text").textContent = badges[name] || "";
+    }
+    for (const e of edgeEls) e.line.classList.toggle("hot", caller(state[e.a]) && fault(state[e.b]));
+    caption.textContent = frame.text;
+    stepItems.forEach((li, i) => li.classList.toggle("on", i + 1 === frame.step));
+  }
+
+  let timer;
+  function play() {
+    clearTimeout(timer);
+    const state = {}, badges = {};
+    if (reduce) { // show the outcome without motion
+      timeline.forEach((f) => { Object.assign(state, f.set); Object.assign(badges, f.badge || {}); });
+      return render(state, badges, timeline[timeline.length - 1]);
+    }
+    let i = 0;
+    const tick = () => {
+      const f = timeline[i];
+      Object.assign(state, f.set); Object.assign(badges, f.badge || {});
+      render(state, badges, f);
+      if (++i < timeline.length) timer = setTimeout(tick, i === 1 ? 1200 : 2600);
+    };
+    tick();
+  }
+  document.getElementById("replay").addEventListener("click", play);
+  play();
+
+})();
+</script>
+</body>
+</html>

@@ -9,7 +9,7 @@ if [[ -f e2e/server.pid ]]; then
   pid=$(cat e2e/server.pid)
   if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
     command_line=$(ps -p "$pid" -o args=)
-    if [[ "$command_line" != *runtime.api* || "$command_line" != *"$state"* ]]; then
+    if [[ "$command_line" != *backend.api* || "$command_line" != *"$state"* ]]; then
       echo "PID file does not identify this test server; refusing to stop it." >&2
       exit 1
     fi
@@ -26,7 +26,7 @@ if curl --max-time 2 -fsS "$base/healthz" >/dev/null 2>&1; then
 fi
 if [[ ${1:-} == fresh ]]; then rm -rf e2e/state; fi
 mkdir -p e2e/state
-nohup "${PY:-.venv/bin/python}" -m runtime.api --host 127.0.0.1 --port "$port" --db "$state" </dev/null >>e2e/server.log 2>&1 &
+nohup "${PY:-.venv/bin/python}" -m backend.api --host 127.0.0.1 --port "$port" --db "$state" </dev/null >>e2e/server.log 2>&1 &
 pid=$!
 echo "$pid" > e2e/server.pid
 for _ in $(seq 40); do

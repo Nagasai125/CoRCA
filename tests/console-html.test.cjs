@@ -7,7 +7,7 @@ const path = require("node:path");
 
 for (const page of ["app.html", "index.html"]) {
   test(`${page}: every input pattern is a valid v-flag regular expression`, () => {
-    const html = fs.readFileSync(path.join(__dirname, "..", "runtime", "web", page), "utf8");
+    const html = fs.readFileSync(path.join(__dirname, "..", "frontend", page), "utf8");
     for (const [, pattern] of html.matchAll(/\spattern="([^"]*)"/g)) {
       assert.doesNotThrow(() => new RegExp(`^(?:${pattern})$`, "v"), `invalid pattern: ${pattern}`);
     }
@@ -15,7 +15,7 @@ for (const page of ["app.html", "index.html"]) {
 }
 
 test("service label pattern accepts dotted and hyphenated labels", () => {
-  const html = fs.readFileSync(path.join(__dirname, "..", "runtime", "web", "app.html"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "frontend", "app.html"), "utf8");
   const pattern = html.match(/id="source-label"[^>]*pattern="([^"]*)"/)[1];
   const re = new RegExp(`^(?:${pattern})$`, "v");
   for (const ok of ["service", "service.name", "k8s-app", "_job"]) assert.ok(re.test(ok), ok);
@@ -24,6 +24,16 @@ test("service label pattern accepts dotted and hyphenated labels", () => {
 
 // Parse the entire shipped script so handler-level checks cannot miss syntax errors.
 test("console script compiles", () => {
-  const html = fs.readFileSync(path.join(__dirname, "..", "runtime", "web", "app.html"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "frontend", "app.html"), "utf8");
   assert.doesNotThrow(() => new (require("node:vm").Script)(html.match(/<script>([\s\S]*?)<\/script>/)[1]));
+});
+
+// Layout changes must not orphan the event handlers that address fixed elements.
+test("console fixed element references and IDs stay connected", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "frontend", "app.html"), "utf8");
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(new Set(ids).size, ids.length, "Every static ID is unique");
+  for (const [, id] of html.matchAll(/\$\("([^"]+)"\)/g)) {
+    assert.ok(ids.includes(id), `Missing console element: ${id}`);
+  }
 });

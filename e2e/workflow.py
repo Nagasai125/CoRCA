@@ -18,7 +18,7 @@ BASE = os.getenv("CORCA_E2E_URL", "http://localhost:8000").rstrip("/")
 ROOT = Path(__file__).parent
 SHOTS = ROOT / "shots"
 INCIDENT = int((ROOT / "incident.txt").read_text())
-SOURCE = json.loads((ROOT.parent / "runtime/source.online-boutique.json").read_text())
+SOURCE = json.loads((ROOT.parent / "lab/source.online-boutique.json").read_text())
 EDGES = [("frontend", "adservice"), ("frontend", "cartservice"), ("frontend", "checkoutservice"),
          ("frontend", "currencyservice"), ("frontend", "productcatalogservice"),
          ("frontend", "recommendationservice"), ("frontend", "shippingservice"),

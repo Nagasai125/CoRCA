@@ -3,7 +3,7 @@
 **/.venv
 **/__pycache__
 .pytest_cache
-runtime/.state
+backend/.state
 lab/.state
 lab/vendor
 RE1-OB
@@ -23,3 +23,10 @@ lab
 *.docx
 compose.secrets.yaml
 e2e
+
+# Development and research never enter the production build context.
+tests
+scripts
+docs
+.github
+CONTRIBUTING.md

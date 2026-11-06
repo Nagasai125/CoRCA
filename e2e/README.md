@@ -1,5 +1,20 @@
 # End-to-end acceptance (browser)
 
+For the current console, start with the controlled browser regression check:
+
+```sh
+# Once, in a development environment:
+uv pip install playwright
+uv run --no-sync python -m playwright install chromium
+# With a local development server running:
+uv run --no-sync python e2e/check_console_browser.py --url http://localhost:8000
+```
+
+It exercises navigation, diagnosis details, logs, service dependencies, and help
+with controlled API responses. It does not save workspace data or verify live
+vendor connectivity. The full workflow below uses a separate, writable test
+workspace and synthetic monitoring data.
+
 Drives the real workspace UI against a live `corca-serve` and a stand-in Prometheus
 that serves Online Boutique cpu/mem series with **two concurrent faults**
 (cartservice CPU hog + currencyservice memory leak) and propagated CPU symptoms on
@@ -30,7 +45,7 @@ diagnosis is accurate on real incidents.
 The restart helper refuses to stop a PID that does not match its test server,
 refuses an occupied application port, and exits nonzero if startup fails. It is
 intended for an interactive terminal; process-supervising runners should start
-`runtime.api` in their own managed foreground session using the same database and
+`backend.api` in their own managed foreground session using the same database and
 port. Set `CORCA_E2E_CHROMIUM` only when intentionally using a preinstalled browser;
 otherwise Playwright uses its matching installed Chromium. All nine workspace
 views are checked through their actual query-string routes during persistence

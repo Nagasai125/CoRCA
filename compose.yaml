@@ -2,7 +2,7 @@ services:
   corca:
     build:
       context: .
-      dockerfile: runtime/Dockerfile
+      dockerfile: backend/Dockerfile
     image: corca:0.2.0
     restart: unless-stopped
     ports:

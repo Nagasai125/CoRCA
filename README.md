@@ -1,201 +1,127 @@
-# CoRCA — incident investigation workspace
+# CoRCA
 
-CoRCA is a self-hosted beta for teams investigating microservice incidents.
-Connect your monitoring backend, confirm service dependencies, and choose an
-incident start time. CoRCA ranks candidate causes, shows unexplained symptoms,
-and keeps shareable, exportable diagnosis history.
+CoRCA (Concurrent Root Cause Analysis) is a self-hosted investigation tool for
+microservice incidents. It compares service metrics around an incident, uses
+service dependencies to rank candidate causes, and shows the evidence that
+remains unexplained.
 
-Supports Prometheus, Grafana Cloud Metrics, Datadog, Dynatrace, and New Relic.
-OpenTelemetry can feed your existing historical metrics backend. Alertmanager
-can start investigations automatically.
+**Status: beta.** Designed for one workspace, one application replica, and a
+trusted team. Findings guide investigation; they are not confirmed causes or
+automatic remediation. SSO, MFA, and tenant isolation are not included.
 
-## Start the beta
+## What it does
 
-Requires Docker with Compose. From this checkout:
+- **Investigate incidents:** run metric-based diagnoses and review saved evidence.
+- **Receive alerts:** collect Alertmanager updates and link alerts to diagnoses.
+- **Analyze log files:** find recurring patterns, explore counts over time, and
+  download reports. No monitoring connection is required; uploads are not retained.
+- **Review evaluations:** display published diagnosis, AI help, and software-check
+  results with sample counts and provenance. Pipelines execute outside CoRCA.
+- **Work as a team:** use local administrator/responder accounts and shared history.
+  Bundled help works without an AI provider; generative answers are optional.
 
-```sh
-docker compose up -d --build
-```
+Monitoring adapters: **Prometheus, Grafana Cloud Metrics, Datadog, Dynatrace,
+and New Relic**. OpenTelemetry can feed the connected metrics backend.
 
-Open [the workspace](http://localhost:8000/app). A fresh local installation opens
-directly; enable individual accounts before sharing access (see below). The application keeps its SQLite database in a persistent Docker volume. No
-Kubernetes cluster, benchmark dataset, or new data collection is required.
-The first image build downloads pinned runtime dependencies.
+## Quick start
 
-1. In **Integrations**, connect your existing metrics backend and verify metrics.
-2. In **Services**, discover services, select those to investigate, and save actual
-   caller → callee dependencies. Explicitly confirm an empty graph for independent services.
-3. **Set investigation sensitivity**. Start with the manual BARO threshold of 6,
-   then adjust it based on your operational experience. This is a heuristic,
-   not environment calibration. Existing calibration files are an advanced option.
-4. Choose **New diagnosis**, enter the incident start, and review the findings.
-   The service waits for the selected incident window to finish before analysis.
-5. Share the diagnosis link with teammates on the same deployment, or download
-   its JSON. Cancel queued work when an investigation is no longer needed.
-
-For a Prometheus server on your host machine, use `host.docker.internal` instead
-of `localhost` in the connection form. Allow the hostname before starting:
+Requires Git and a running Docker daemon with Docker Compose.
 
 ```sh
-CORCA_ALLOWED_SOURCE_HOSTS=host.docker.internal docker compose up -d
+git clone https://github.com/Nagasai125/CoRCA.git
+cd CoRCA
+docker compose up -d --build --wait
 ```
 
-For vendor credentials, private endpoints, query examples, and window resolution,
-see [telemetry setup](docs/telemetry-setup.md). Enter API keys/tokens directly in the connection form, or use server environment
-variables through the advanced option. Secret values stay in private server files;
-SQLite settings and exports contain references only. Remote users need your private network
-or HTTPS access gateway: Compose binds to local loopback by default.
+Open [CoRCA](http://localhost:8000/app). Workspace data persists in a Docker volume.
+No Kubernetes cluster or benchmark dataset is required.
 
-## Operate and support
+A fresh installation uses shared administrator access and binds to localhost.
+[Create named accounts](docs/guides/operations.md#individual-access) before sharing
+access; use HTTPS for remote deployments.
 
 ```sh
-docker compose ps
-docker compose logs --tail=100 corca
-docker compose restart corca
-# Stop while preserving saved workspace data:
-docker compose down
+docker compose logs -f corca  # Follow backend logs; Ctrl+C stops following.
+docker compose down           # Stop the app and preserve workspace data.
 ```
 
-Use [the operations guide](docs/operations.md) for credential setup, alerts,
-backup/restore, upgrades, and troubleshooting. Do not use `down -v` unless you
-intend to delete the workspace volume.
+`docker compose down -v` deletes the workspace volume.
 
-This beta supports one service replica and a trusted team with access to the deployment.
-Named local accounts, administrator/responder roles, and configuration activity
-are available under Team & access. Before accounts are enabled, access is shared
-and everyone who can reach the deployment can change settings. SSO, MFA, and
-tenant isolation are not included.
+## First investigation
 
-Diagnosis results are investigation leads. Manual sensitivity is labeled in
-results; partial results show evidence still unexplained. Score shares are not
-probabilities. Confirm findings against dashboards/logs before remediation.
-BARO is the default; CIRCA remains an advanced method enabled by compatible
-existing calibration. CPU/memory coverage alone may miss latency/error faults.
+1. Open **Setup → Connect & verify**, choose a provider, and verify its connection.
+2. Open **Setup → Services**, discover services, select the scope, and save
+   caller → dependency relationships. Confirm an empty graph for independent services.
+3. Set investigation sensitivity for BARO, or load compatible calibration.
+4. Choose **Start a diagnosis**, enter the incident start time, and review results.
 
-## Evaluation evidence for customers
+For logs only, open **Log analysis** and upload a UTF-8 `.log`, `.txt`, `.jsonl`,
+or `.ndjson` file up to **2 MiB**. Download the report to keep it.
 
-Open **Quality** to review published diagnosis evaluations, AI help quality,
-and release checks separately. Each summary includes sample counts, scope,
-evidence type, limitations, completion time, publisher, build revision when
-provided, and a pipeline link when provided. Empty categories have no assumed
-score. Passing software checks do not establish incident accuracy.
+See [telemetry setup](docs/guides/telemetry.md) for credentials, queries, and custom
+hosts. Inside Docker, `localhost` is the container; host monitoring typically uses
+`host.docker.internal`, allowed through `CORCA_ALLOWED_SOURCE_HOSTS`.
 
-Administrators can upload prepared summaries. Pipelines can publish them with a
-separate, publish-only token. Existing pilot assessments and JUnit reports have
-CLI converters; CI retains a software-check summary artifact and optionally
-publishes it on default-branch pushes when configured.
-See [evaluation operations](docs/operations.md#evaluation-results-and-pipeline-publication).
-CoRCA displays results; Jenkins and other pipelines still execute their own jobs.
+## Architecture
 
-## Ask CoRCA
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture/corca-stack-dark.png">
+  <img src="docs/architecture/corca-stack.png" alt="CoRCA architecture: browser frontend calls FastAPI; SQLite persists jobs; a background worker queries the connected monitoring provider and runs the CoRCA engine. Alertmanager sends webhooks and CI pipelines publish evaluation summaries.">
+</picture>
 
-Choose **Ask CoRCA** from any workspace screen, or open **Help**. Ask about
-connections, alerts, log uploads, roles, or investigation results. Answers include
-product-guide sources and links to the relevant screen. Guide answers work
-locally without a model; the interface clearly identifies this mode.
+FastAPI serves the frontend and API. Jobs persist in SQLite before the worker
+claims them; the worker, provider adapters, and ranking engine run in one service.
+Research and lab tools run separately. [Diagram source](docs/architecture/corca-stack-diagram.html).
 
-An optional server-side OpenAI Responses connector provides generative answers
-using the bundled guides and basic setup status. It needs explicit administrator
-activation, a compatible model, and a server-side API key. No AI provider is
-configured by default. See [customer-help operations](docs/operations.md#customer-help-bot).
-No logs, credentials, raw queries, service names, or incident contents are
-automatically attached. Do not type secrets into chat. CoRCA does not persist
-chat; it clears on reload. The bot explains and navigates; it cannot change
-settings or investigate incident evidence itself.
+## Repository layout
 
-## Individual accounts and roles
+| Path | Responsibility |
+| --- | --- |
+| `frontend/` | Console, landing page, styles, JavaScript, fonts, and help content |
+| `backend/` | FastAPI endpoints, authentication, adapters, storage, and operator commands |
+| `corca/` | Shared diagnosis and ranking engine |
+| `tests/` | Python and Node regression checks; application tests in `tests/backend/` |
+| `e2e/` | Browser acceptance checks and synthetic provider fixtures |
+| `lab/` | Isolated Kubernetes testbed and fault-collection tools |
+| `scripts/` | Research experiments, benchmarks, calibration, and reporting |
+| `docs/` | Current guides, API reference, architecture, and research procedures |
 
-Open **Team & access** for setup instructions. Create the first administrator on
-this deployment's host; the command prompts privately for a password:
+FastAPI serves the vanilla HTML/JavaScript frontend. SQLite stores workspace data.
+The production package includes `frontend/`, `backend/`, and `corca/`; lab,
+research, and test tools are excluded.
 
-```sh
-docker compose exec corca python -m runtime.access bootstrap-admin \
-  --db /var/lib/corca/corca.db --username your.name
-```
+## Local development
 
-Reload the console and sign in. Administrators can add people, change roles,
-disable accounts, reset passwords, and review configuration activity. Responders
-can investigate, analyze logs, and read shared history; configuration changes and
-team management are restricted to administrators. Everyone can change their own
-password. Password resets, role changes, and disabling accounts revoke sessions.
-
-For shared deployments, set `CORCA_REQUIRE_ACCOUNTS=1` in `.env` **after bootstrap**
-and recreate the service. Startup then refuses a workspace without accounts.
-Use HTTPS for remote access. Keep a separate `CORCA_API_TOKEN`/`CORCA_TOKEN_FILE`
-for Alertmanager; once accounts exist, this token grants webhook delivery only.
-Existing gateway-injected shared keys no longer grant console access.
-See [operations](docs/operations.md#individual-access) for deployment and recovery.
-Local accounts do not provide SSO, MFA, or tenant isolation.
-
-## Live alerts
-
-Open **Alerts** to see received Alertmanager events, firing/resolved state,
-severity, delivery time, and the linked investigation. The visible console
-refreshes every five seconds. Search and status filters query the stored inbox;
-up to 200 matching records are displayed. State reflects the latest received
-webhook, not a direct health check of Alertmanager.
-
-**Connect alerts** generates the receiver configuration for your reachable
-CoRCA address, with resolved notifications enabled. Merge the receiver and route
-the alerts you want to it in your existing Alertmanager. **Test CoRCA receiver** (under Connection settings → Troubleshooting and advanced details) checks
-the receiver/storage only, queues no diagnosis, and is visibly distinguished from
-external delivery. Real firing alerts start diagnoses once monitoring and
-sensitivity are configured. Rules, routing, and silences stay in Alertmanager.
-
-## Analyze log files
-
-Open **Logs**, choose a UTF-8 `.log`, `.txt`, `.jsonl`, or `.ndjson` file, and select
-**Analyze logs**. No monitoring connection is required. Optionally enter an incident
-start and a fallback service name. Reports show recurring error/warning patterns,
-line-numbered excerpts, per-service counts, and a timeline for recognized timestamps.
-These are log observations, not causal root-cause findings. Download the JSON report
-to keep it; uploads and reports are not saved on the server.
-
-Limits: 2 MiB, 50,000 lines, 16,384 characters per line. JSON logs use one object per
-line, with common timestamp, level, message, and service fields. ISO timestamps and
-Unix seconds/milliseconds are supported; timestamps without an offset assume UTC.
-Missing timestamps/severity and malformed JSON lines are disclosed in the report.
-Incident comparisons are counts over available entries, not equal-duration rates.
-
-Clients can send raw file bytes to `POST /v1/logs/analyze?filename=incident.log`,
-with optional `service` and `incident_start` (Unix seconds) query parameters.
-The deployment's API authentication and request limits apply.
-
-## Controlled pilot
-
-Use the [pilot milestone plan](docs/pilot-plan.md) to check deployment setup,
-assess exported diagnoses against independently confirmed incidents, and exercise
-storage recovery. These operator checks do not grant production approval.
-
-## Develop
-
-Python 3.12, with [uv](https://docs.astral.sh/uv/):
+Requires **Python 3.12**, **uv**, and **Node.js 22+** for console tests.
 
 ```sh
 uv sync --frozen --extra dev --extra server
-uv pip install --no-deps -r runtime/rcaeval.lock
+uv pip install --no-deps --require-hashes -r backend/rcaeval.lock
 uv run --no-sync corca-serve
 ```
 
-Open `http://localhost:8000/app` directly; no key entry is needed.
-Run application and core checks with:
+Open [the local console](http://localhost:8000/app). The frontend has no separate
+build step. Run these checks before submitting changes:
 
 ```sh
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run --no-sync python -m pytest -q tests runtime
-# Navigation handler regressions (Node.js, development only):
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 uv run --no-sync python -m pytest -q
 node --test tests/console-navigation.test.cjs tests/console-html.test.cjs
 ```
 
-The same checks run in GitHub Actions. The package includes the web console and
-`corca-serve` / `corca-admin` commands. The Docker image uses hash-pinned runtime
-requirements and runs as a non-root user with a read-only filesystem in Compose.
+## Contributing
 
-## Project documentation
+For bugs, include reproduction steps and expected/actual behavior. For pull
+requests, keep the scope focused, explain the user impact, list checks run, and
+update affected docs. Do not commit credentials, customer logs, databases, or
+local experiment outputs.
 
-- [Operations and troubleshooting](docs/operations.md)
-- [Telemetry integrations](docs/telemetry-setup.md)
-- [Beta scope and prior validation](docs/beta-review.md)
-- [Research and benchmark workflow](docs/research-workflow.md) — optional development tooling
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setup, review expectations, browser and
+package checks, and the separation between application and research work.
 
-Application code lives in `runtime/`, the ranking engine in `corca/`, and
-optional experiment tooling in `scripts/` and `lab/`.
+## Documentation
+
+- [Documentation index](docs/README.md) — find the guide for your task.
+- [API reference](docs/api/README.md) and [OpenAPI schema](docs/api/openapi.json).
+- [Operations](docs/guides/operations.md) — accounts, alerts, backups, and deployment.
+- [Customer pilot checklist](docs/guides/pilot.md) — validate your target environment.
+- [Changelog](CHANGELOG.md) — release and behavior changes.
