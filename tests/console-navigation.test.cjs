@@ -17,11 +17,12 @@ test('diagnosis evidence export includes saved chart data and review, and report
   const job={id:'diagnosis-id',result:{status:'diagnosed'}};
   const evidence={available:true,series:[{service:'db',points:[[1,2]]}],edges:[]};
   const review={revision:1,outcome:'fault',root_causes:['db']};
-  const context=vm.createContext({api:async path=>{requests.push(path);return path.endsWith('/review')?{review}:evidence;},download:(name,content)=>exports.push({name,data:JSON.parse(content)}),toast:text=>notices.push(text)});
+  const uncertainty={available:false,eligible_incidents:0};
+  const context=vm.createContext({api:async path=>{requests.push(path);return path.endsWith('/review')?{review}:path.endsWith('/uncertainty')?uncertainty:evidence;},download:(name,content)=>exports.push({name,data:JSON.parse(content)}),toast:text=>notices.push(text)});
   vm.runInContext(handler('  async function downloadEvidence(', '  async function rerun('),context);
   await context.downloadEvidence(job);
-  assert.equal(requests.length,2);
-  assert.deepEqual(exports[0],{name:'corca-diagnosis-id.json',data:{diagnosis:job,evidence,review}});
+  assert.equal(requests.length,3);
+  assert.deepEqual(exports[0],{name:'corca-diagnosis-id.json',data:{diagnosis:job,evidence,review,uncertainty}});
   context.api=async()=>{throw new Error('Connection lost');};
   await context.downloadEvidence(job);
   assert.equal(exports.length,1);
@@ -92,7 +93,7 @@ test('search shortcut only captures slash when the search is visible and the use
 });
 
 test('each route selects its own page and records navigable history', () => {
-  const views = ['overview', 'diagnoses', 'alerts', 'logs', 'services', 'integrations', 'guide', 'team', 'quality'];
+  const views = JSON.parse(html.match(/const views = (\[[^\n]+\]);/)[1]);
   const pages = Object.fromEntries(views.map(view => ['view-' + view, {hidden: view !== 'overview'}]));
   Object.assign(pages, {'help-drawer':{open:false},'breadcrumb-group':{},'breadcrumb-page':{}});
   const links = views.map(view => ({dataset: {view}, attributes: {},
@@ -109,20 +110,22 @@ test('each route selects its own page and records navigable history', () => {
     history: {pushState(_state, _title, url) { urls.push(url); location.search = url; }},
   });
   vm.runInContext(handler('  function navigate(', '  function restoreLocation()'), context);
-  for (const view of ['diagnoses', 'alerts', 'logs', 'services', 'integrations', 'team', 'quality']) {
+  const routes = ['diagnoses', 'alerts', 'logs', 'services', 'integrations', 'team', 'quality', 'about'];
+  for (const view of routes) {
     context.navigate(view);
     assert.equal(pages['view-' + view].hidden, false);
     assert.equal(views.filter(view => !pages["view-"+view].hidden).length, 1);
     assert.equal(links.find(link => link.dataset.view === view).attributes['aria-current'], 'page');
   }
-  assert.deepEqual(urls, ['?view=diagnoses', '?view=alerts', '?view=logs', '?view=services', '?view=integrations', '?view=team', '?view=quality']);
+  assert.deepEqual(urls, routes.map(view => '?view=' + view));
+  assert.equal(pages['breadcrumb-page'].textContent, 'About CoRCA');
   context.navigate('services', false); // popstate restores a route without adding history
   assert.equal(pages['view-services'].hidden, false);
-  assert.equal(urls.length, 7);
+  assert.equal(urls.length, routes.length);
   context.navigate("guide");
   assert.equal(pages["help-drawer"].open,true);
   assert.equal(pages["view-services"].hidden,false,"help retains the underlying screen");
-  assert.equal(urls.length,7,"opening contextual help does not replace the route");
+  assert.equal(urls.length,routes.length,"opening contextual help does not replace the route");
 });
 
 test('overview prioritizes the first incomplete prerequisite over existing history', () => {

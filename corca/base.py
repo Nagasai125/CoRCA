@@ -83,7 +83,7 @@ def anomaly_scores(df: pd.DataFrame, inject_time: int, q: float = 0.9) -> pd.Ser
         # ponytail: fixed noise floors for fractions/counts; estimate sampling
         # uncertainty when request/event exposure counts are available.
         kind = metric_kind(c)
-        floor = {"error": 0.01, "log-error": 1.0, "workload": 1.0}.get(kind, 1e-9)
+        floor = {"error": 0.01, "trace-error": 0.01, "log-error": 1.0, "workload": 1.0}.get(kind, 1e-9)
         sigma = max(1.4826 * np.nanmedian(np.abs(a - med)), np.nanstd(a), 0.01 * abs(med), floor)
         scores[c] = float(np.nanquantile((b - med) / sigma, q))
     return pd.Series(scores, dtype=float).sort_values(ascending=False)

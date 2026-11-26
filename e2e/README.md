@@ -15,6 +15,15 @@ with controlled API responses. It does not save workspace data or verify live
 vendor connectivity. The full workflow below uses a separate, writable test
 workspace and synthetic monitoring data.
 
+The joint-telemetry check imports synthetic metric, log, and trace files through
+the browser, then verifies the saved evidence, repair estimate, probability
+abstention, download, re-run, and mobile layout. It **saves test jobs**; use a
+disposable database and a separate server port:
+
+```sh
+uv run --no-sync python e2e/check_joint_browser.py --url http://localhost:8047 --output e2e/shots/joint
+```
+
 Drives the real workspace UI against a live `corca-serve` and a stand-in Prometheus
 that serves Online Boutique cpu/mem series with **two concurrent faults**
 (cartservice CPU hog + currencyservice memory leak) and propagated CPU symptoms on

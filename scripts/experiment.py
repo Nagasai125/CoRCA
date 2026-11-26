@@ -37,6 +37,7 @@ def prepare_experiment(args, cases):
         "max_rounds": args.max_rounds, "keep_resource": not args.no_keep_resource,
         "round_timeout": args.round_timeout, "seed": args.seed,
         "drop_telemetry": args.drop_telemetry,
+        "workers": getattr(args, "workers", 1),
         "code": {str(p.relative_to(source)): digest_file(p) for p in code if p.is_file()},
         "python": platform.python_version(), "platform": platform.platform(),
         "packages": {d.metadata["Name"]: d.version for d in metadata.distributions()},

@@ -4,6 +4,23 @@
 
 Changes since the packaged 0.2.0 beta. No new release or version tag has been published.
 
+### Committee review workflow
+
+- Added one-command synthetic acceptance and full recorded-data evaluation,
+  isolated review workspaces, portable source/data packages and artifact hashes.
+- Published per-case baseline, CoRCA, ablation and matched-output-size reports
+  through the existing evaluation interface. Research tables retain failures.
+- Added bounded parallel public benchmarking and matched-escalation CSVs.
+
+### Joint telemetry investigations
+
+- Added metric/log/trace import, per-incident observed topology changes, aligned
+  evidence charts, retained numeric inputs, and immutable re-runs.
+- Added normal-window structural repair estimates with validation and explicit
+  availability limits, plus candidate reliability from independently confirmed
+  earlier incidents with held-out calibration checks.
+- Raw imported log messages and spans are not persisted.
+
 ### Evaluation reliability and focus
 
 - Evaluations now focuses on diagnosis accuracy, confirmed causes, anomaly
@@ -23,6 +40,9 @@ Changes since the packaged 0.2.0 beta. No new release or version tag has been pu
   container-startup, and isolated-storage-recovery checks.
 
 ### Frontend clarity
+
+- Added About CoRCA with the installed version, diagnosis methods, and links to
+  setup, evaluations, and project resources.
 
 - Home separates normal activity from items needing attention; completed setup
   stays optional and preserves the reader's expanded state.

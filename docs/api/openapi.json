@@ -738,6 +738,64 @@
         "title": "SensitivitySetup",
         "type": "object"
       },
+      "TelemetryBundle": {
+        "additionalProperties": false,
+        "properties": {
+          "environment": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Environment",
+            "type": "string"
+          },
+          "incident": {
+            "$ref": "#/components/schemas/Incident"
+          },
+          "logs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logs"
+          },
+          "traces": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traces"
+          }
+        },
+        "required": [
+          "environment",
+          "incident"
+        ],
+        "title": "TelemetryBundle",
+        "type": "object"
+      },
       "TopologySetup": {
         "additionalProperties": false,
         "properties": {
@@ -1685,6 +1743,51 @@
         "summary": "Submit"
       }
     },
+    "/v1/diagnoses/import": {
+      "post": {
+        "description": "Queue aligned numeric evidence; raw log bodies and spans are not retained.",
+        "operationId": "import_diagnosis_v1_diagnoses_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelemetryBundle"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Diagnosis"
+      }
+    },
     "/v1/diagnoses/{job_id}": {
       "get": {
         "operationId": "get_diagnosis_v1_diagnoses__job_id__get",
@@ -1820,6 +1923,51 @@
         "summary": "Diagnosis Evidence"
       }
     },
+    "/v1/diagnoses/{job_id}/rerun": {
+      "post": {
+        "operationId": "rerun_saved_diagnosis_v1_diagnoses__job_id__rerun_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rerun Saved Diagnosis"
+      }
+    },
     "/v1/diagnoses/{job_id}/review": {
       "get": {
         "operationId": "diagnosis_review_v1_diagnoses__job_id__review_get",
@@ -1916,6 +2064,51 @@
           }
         ],
         "summary": "Review Diagnosis"
+      }
+    },
+    "/v1/diagnoses/{job_id}/uncertainty": {
+      "get": {
+        "operationId": "diagnosis_uncertainty_v1_diagnoses__job_id__uncertainty_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          },
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Diagnosis Uncertainty"
       }
     },
     "/v1/diagnosis-evaluations": {

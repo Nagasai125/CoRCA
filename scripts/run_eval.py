@@ -2,6 +2,7 @@
 import argparse
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 from pathlib import Path
 
@@ -90,6 +91,8 @@ def main():
     ap.add_argument("--drop-telemetry", type=float, default=0,
                     help="fraction of metric streams removed, including root services")
     ap.add_argument("--retry-failed", action="store_true", help="retry errors and partial timeouts")
+    ap.add_argument("--workers", type=int, choices=range(1,5), default=1,
+                    help="bounded concurrent case evaluations")
     args = ap.parse_args()
     if not 0 < args.round_timeout < float("inf"):
         ap.error("--round-timeout must be finite and positive")
@@ -108,19 +111,24 @@ def main():
             if not args.retry_failed or r["status"] == "ok"}
     cases = all_cases[:args.limit]
     print(f"{len(cases)} cases, methods={args.methods}, {len(done)} runs already done", flush=True)
-    with output.open("a") as stream:
-        for index, case in enumerate(cases, 1):
+    with output.open("a") as stream, ThreadPoolExecutor(max_workers=args.workers) as pool:
+        tasks = []
+        for case in cases:
             case_key = str(Path(case.path).resolve().relative_to(Path(args.data).resolve()))
             for method in dict.fromkeys(args.methods):
                 if (case_key, method) in done:
                     continue
-                args.method = method
-                record = evaluate_case(case, args, experiment_id)
-                stream.write(json.dumps(record, allow_nan=False) + "\n")
-                stream.flush()
-                print(f"[{index}/{len(cases)}] {method} {case_key} {record['status']} "
-                      f"base={record['base_rank'][:3]} "
-                      f"corca={[r['service'] for r in record['rounds']]}", flush=True)
+                task_args = argparse.Namespace(**vars(args), method=method)
+                tasks.append(pool.submit(evaluate_case, case, task_args, experiment_id))
+        for index, future in enumerate(as_completed(tasks), 1):
+            record = future.result()
+            stream.write(json.dumps(record, allow_nan=False) + "\n")
+            stream.flush()
+            print(f"[{index}/{len(tasks)}] {record['method']} {record['case']} {record['status']} "
+                  f"base={record['base_rank'][:3]} "
+                  f"corca={[r['service'] for r in record['rounds']]}", flush=True)
+    if prepare_experiment(args, all_cases) != experiment_id:
+        ap.error("experiment changed during evaluation; preserve records and use a new output folder")
 
 
 if __name__ == "__main__":

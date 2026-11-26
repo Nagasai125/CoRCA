@@ -87,7 +87,9 @@ scrape exporter alone does not provide historical query windows.
 
 CoRCA is not an OTLP receiver, trace storage system, or log backend. It can analyze
 latency/error metrics derived by your existing pipeline, including span metrics,
-but it does not derive service dependencies from traces itself.
+and imported joint investigations derive observed dependencies from uploaded
+parent-child spans. Live provider connections remain metric-only; see
+[joint telemetry investigations](joint-diagnosis.md).
 See [Collector configuration](https://opentelemetry.io/docs/collector/configuration/)
 and [OpenTelemetry/Prometheus integration](https://opentelemetry.io/docs/compatibility/prometheus/otlp-metrics-export/).
 

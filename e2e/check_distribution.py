@@ -7,6 +7,8 @@ from zipfile import ZipFile
 def check(path):
     with ZipFile(path) as wheel:
         names = wheel.namelist()
+        assert any(name.endswith('.dist-info/licenses/LICENSE') for name in names), 'Missing project license'
+        assert b'License-Expression: MIT' in wheel.read(next(name for name in names if name.endswith('.dist-info/METADATA')))
         assert {"backend/api.py", "backend/evidence.py", "backend/reviews.py", "frontend/workspace-visuals.js", "frontend/workspace-visuals.css", "corca/corca.py", "frontend/app.html",
                 "frontend/index.html", "frontend/help-topics.json"} <= set(names), "Missing application assets"
         assert any(name.startswith("frontend/fonts/") and name.endswith(".woff") for name in names), "Missing console fonts"

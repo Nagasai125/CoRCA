@@ -1,6 +1,28 @@
 name: ci
 on: [push, pull_request]
 jobs:
+  defense:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --extra dev --extra server
+      - run: uv pip install --no-deps --require-hashes -r backend/rcaeval.lock
+      - name: Run the complete synthetic review workflow
+        run: uv run --no-sync python -m scripts.defense demo --out results/defense-demo
+        env: {OPENBLAS_NUM_THREADS: "1", OMP_NUM_THREADS: "1"}
+      - name: Verify recorded artifacts
+        run: uv run --no-sync python -m scripts.defense verify --out results/defense-demo
+      - name: Retain the committee review package
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: corca-defense-review
+          path: |
+            results/defense-demo/committee-review.zip
+            results/defense-demo/pipeline.json
+          if-no-files-found: error
+          retention-days: 30
   test:
     runs-on: ubuntu-latest
     steps:

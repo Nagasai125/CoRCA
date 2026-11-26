@@ -87,6 +87,27 @@ def sensitivity(source, records, calibration):
     return pd.DataFrame(rows)
 
 
+def matched_escalation(source, records, calibration):
+    """Hold output size fixed to separate reranking from returning more candidates."""
+    rows = []
+    for rec in records:
+        if rec["method"] not in calibration:
+            continue
+        cal = calibration[rec["method"]]
+        tau = cal.get("fold_taus", {}).get(rec.get("case_id"), cal["tau"])
+        predicted = predicted_set(rec, tau)
+        baseline = rec.get("base_rank", [])[:len(predicted)]
+        rows.append({"source":source,"case":rec["case"],"method":rec["method"],
+                     "n_true":len(rec["truth"]),**{k:rec.get(k,v) for k,v in VARIANT.items()},
+                     "n_pred":len(predicted),"baseline_n_pred":len(baseline),
+                     "corca_F1":set_prf(predicted,rec["truth"])[2],
+                     "matched_F1":set_prf(baseline,rec["truth"])[2],
+                     "corca_exact":exact_match(predicted,rec["truth"]),
+                     "matched_exact":exact_match(baseline,rec["truth"]),
+                     "size_matched":len(predicted)==len(baseline)})
+    return pd.DataFrame(rows)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("folders", nargs="+")
@@ -110,6 +131,12 @@ def main():
     diffs.to_csv(out / "paired_diffs.csv", index=False)
     sens_table = sens.groupby(["source", "method", "n_true", "tau_scale", "max_rounds"]).mean().round(3)
     sens_table.to_csv(out / "sensitivity.csv")
+    matched = pd.concat([matched_escalation(Path(p).name,r,c) for p,(_,r,c) in zip(args.folders,loaded)],ignore_index=True)
+    matched.to_csv(out / "matched_escalation_cases.csv",index=False)
+    matched.groupby(KEYS).agg(incidents=('case','nunique'),attempts=('case','size'),
+        size_match_rate=('size_matched','mean'),corca_F1=('corca_F1','mean'),
+        matched_F1=('matched_F1','mean'),corca_exact=('corca_exact','mean'),
+        matched_exact=('matched_exact','mean')).to_csv(out / "matched_escalation.csv")
     main_rows = rq[(rq["drop"] == 0) & rq["keep_resource"] & (rq["graph_mode"] == "observed")]
     with pd.option_context("display.width", 250, "display.max_columns", None):
         print(main_rows[["source", "method", "n_true", "n_incidents", *[f"{a}_F1" for a in APPROACHES]]].to_string(index=False))
