@@ -43,6 +43,9 @@ from backend.credentials import Credentials, FIELDS as CREDENTIAL_FIELDS
 from backend.quality import Evaluation, Evaluations
 from backend.reviews import OutcomeReview, Reviews
 from backend.evidence import capture_evidence
+from backend.fusion import FUSION_POLICY, fuse
+from backend.uncertainty import estimate as estimate_uncertainty
+from corca.structural import repair_effects
 from backend.helpbot import HelpBot, HelpQuestion
 from backend.alerts import AlertInbox
 from backend.access import Access, COOKIE, SESSION_SECONDS, audit
@@ -86,6 +89,21 @@ class WindowRequest(BaseModel):
     normal_seconds: int = Field(default=300, ge=60, le=3600)
     anomaly_seconds: int = Field(default=120, ge=60, le=1800)
     method: Literal["baro", "circa"] = "baro"
+
+
+class TelemetryBundle(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    environment: str = Field(min_length=1, max_length=100)
+    incident: Incident
+    traces: dict | list[dict] | None = None
+    logs: dict | list[dict] | None = None
+
+    @field_validator("environment")
+    @classmethod
+    def nonblank_environment(cls, value):
+        if not value.strip():
+            raise ValueError("Name the environment these observations came from")
+        return value.strip()
 
 
 class ConnectionSetup(BaseModel):
@@ -304,16 +322,28 @@ def run_job(job, jobs, source, thresholds, timeout, fetch):
                 job["method"] == "circa" and "feature_policy" in context and context["feature_policy"] != FEATURE_POLICY):
             raise ValueError("Queued calibration policy is outdated; recalibrate before submitting a new diagnosis")
         source, thresholds = context.get("source", source), context.get("thresholds", thresholds)
-        frame = fetch(source, job["start"], job["end"])
+        imported = context.get("imported_incident")
+        frame = pd.DataFrame(imported["rows"], columns=imported["columns"]) if imported else fetch(source, job["start"], job["end"])
         fetched=time.perf_counter()
         rows = frame.astype(object).where(frame.notna(), None).values.tolist()
-        incident = Incident(columns=list(frame.columns), rows=rows, inject_time=job["inject_time"],
+        incident = Incident.model_validate(imported) if imported else Incident(columns=list(frame.columns), rows=rows, inject_time=job["inject_time"],
                             method=job["method"], edges=source.get("edges"),
                             anomaly_threshold=thresholds.get(job["method"]) if context.get("threshold_mode") == "manual" else None)
-        result = diagnose(incident, thresholds, timeout)
-        analyzed=time.perf_counter()
+        result = diagnose(incident, thresholds, timeout, dataset=None) if imported and incident.method=="baro" else diagnose(incident, thresholds, timeout)
         result["threshold_mode"] = context.get("threshold_mode", "calibrated")
-        evidence=capture_evidence(frame,source,job['inject_time'])
+        fusion = context.get("fusion")
+        if fusion:
+            prepared, dropped, _ = prepare_window(incident)
+            result["fusion"] = {k:v for k,v in fusion.items() if k != "modalities"}
+            result["fusion"]["used_modalities"] = sorted({m for c,m in fusion["modalities"].items() if c not in dropped})
+            result["fusion"]["discarded_columns"] = dropped
+            result["structural_model"] = repair_effects(prepared,incident.inject_time,incident.edges or [],result.get("root_causes",[]))
+            result["analysis_profile"] = context["analysis_profile"]
+            result["input_kind"] = "uploaded_telemetry"
+        analyzed=time.perf_counter()
+        evidence=capture_evidence(frame,source,job['inject_time'],fusion["modalities"] if fusion else None)
+        if fusion:
+            evidence["fusion"] = fusion
         result['processing_seconds']=time.perf_counter()-started
         result['timings']={'fetch_seconds':fetched-started,'analysis_seconds':analyzed-fetched,
                            'preview_seconds':time.perf_counter()-analyzed}
@@ -397,7 +427,7 @@ def prepare_window(incident):
     return df, unusable, missing
 
 
-def diagnose(incident, thresholds, timeout):
+def diagnose(incident, thresholds, timeout, dataset="re2-ob"):
     tau = incident.tau if incident.tau is not None else thresholds.get(incident.method)
     if tau is None:
         raise HTTPException(422, "a calibrated tau or a configured calibration file is required")
@@ -416,7 +446,7 @@ def diagnose(incident, thresholds, timeout):
                 "dropped_metrics": unusable, "anomaly_threshold": incident.anomaly_threshold}
     try:
         result = corca(df, incident.inject_time, method=incident.method, graph=graph,
-                       max_rounds=3, tau=tau, round_timeout=timeout, dataset="re2-ob")
+                       max_rounds=3, tau=tau, round_timeout=timeout, dataset=dataset)
     except InsufficientEvidence as exc:
         return {"status": "insufficient_evidence", "root_causes": [], "rounds": [],
                 "reason": str(exc), "dropped_metrics": unusable}
@@ -658,6 +688,15 @@ def create_app(token=None, thresholds=None, timeout=20, concurrency=2, source=No
         if reviews is None: raise HTTPException(503,'Persistent storage is required for outcome reviews')
         return {'review':reviews.get(job_id)}
 
+    @app.get('/v1/diagnoses/{job_id}/uncertainty', dependencies=[Depends(authorized)])
+    def diagnosis_uncertainty(job_id: str):
+        if jobs is None:
+            raise HTTPException(503, "Persistent storage is required for confirmed-outcome calibration")
+        try:
+            return estimate_uncertainty(jobs, job_id)
+        except KeyError:
+            raise HTTPException(404, "Diagnosis not found") from None
+
     @app.get('/v1/diagnoses/{job_id}/evidence', dependencies=[Depends(authorized)])
     def diagnosis_evidence(job_id: str):
         if jobs is None or jobs.get(job_id) is None: raise HTTPException(404,'Diagnosis not found')
@@ -701,7 +740,7 @@ def create_app(token=None, thresholds=None, timeout=20, concurrency=2, source=No
 
     def require_jobs(method):
         if jobs is None or source is None:
-            raise HTTPException(503, "Connect a telemetry source in Setup → Connect & verify first")
+            raise HTTPException(503, "Connect a telemetry source in Settings → Connect & verify first")
         if method not in thresholds:
             raise HTTPException(422, f"Configure sensitivity or load calibration for {method} on the Services page")
 
@@ -720,6 +759,8 @@ def create_app(token=None, thresholds=None, timeout=20, concurrency=2, source=No
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def home():
         return landing
+
+    console = console.replace("__CORCA_APP_VERSION__", app.version)
 
     @app.get("/app", response_class=HTMLResponse, include_in_schema=False)
     def app_page():
@@ -997,6 +1038,48 @@ def create_app(token=None, thresholds=None, timeout=20, concurrency=2, source=No
             return jobs.add(window.method, window.inject_time, normal, anomaly,
                             context=current_context(), max_pending=max_pending)[0]
 
+    @app.post("/v1/diagnoses/import", status_code=202, dependencies=[Depends(authorized)])
+    def import_diagnosis(bundle: TelemetryBundle):
+        """Queue aligned numeric evidence; raw log bodies and spans are not retained."""
+        if jobs is None:
+            raise HTTPException(503, "Start with persistent storage to import investigations")
+        incident = bundle.incident
+        if incident.tau is None:
+            raise HTTPException(422, "Set an explicit sensitivity for the combined telemetry; metric-only calibration is not interchangeable")
+        if incident.edges is None and bundle.traces is None:
+            raise HTTPException(422, "Provide trace evidence or dependencies (an empty list confirms independent services)")
+        if not slots.acquire(blocking=False):
+            raise HTTPException(503, "Diagnosis capacity reached", headers={"Retry-After":"5"})
+        try:
+            frame = pd.DataFrame(incident.rows, columns=incident.columns)
+            if frame["time"].iloc[0] <= 0 or frame["time"].iloc[-1] > time.time():
+                raise ValueError("Imported observations must use completed positive Unix-time windows")
+            combined, fusion = fuse(frame, incident.inject_time, bundle.traces, bundle.logs)
+            edges = sorted(set(incident.edges or []) | {tuple(e) for e in fusion["topology"]["edges"]})
+            payload = {**incident.model_dump(), "columns":list(combined.columns),
+                       "rows":combined.astype(object).where(combined.notna(),None).values.tolist(),
+                       "edges":edges, "anomaly_threshold":incident.tau}
+            checked = Incident.model_validate(payload)
+            config = {"environment":bundle.environment, "columns":sorted(combined.columns),
+                      "method":incident.method, "tau":incident.tau, "policy":FUSION_POLICY,
+                      "stopping_policy":STOPPING_POLICY,"feature_policy":FEATURE_POLICY,
+                      "step_seconds":float(np.median(np.diff(frame["time"]))),
+                      "topology_policy":"configured_plus_observed" if bundle.traces is not None else "configured",
+                      "configured_edges":sorted(incident.edges or [])}
+            analysis_profile = hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest()
+            context = {"source":{"provider":"uploaded","services":sorted({service_of(c) for c in combined if c!="time"}),"edges":edges},
+                       "thresholds":{incident.method:incident.tau}, "threshold_mode":"manual",
+                       "stopping_policy":STOPPING_POLICY,"feature_policy":FEATURE_POLICY,
+                       "imported_incident":checked.model_dump(),"fusion":fusion,"analysis_profile":analysis_profile}
+            return jobs.add(incident.method,incident.inject_time,
+                            incident.inject_time-float(frame["time"].iloc[0]),
+                            float(frame["time"].iloc[-1])-incident.inject_time,
+                            context=context,max_pending=max_pending)[0]
+        except (ValueError, TypeError, AttributeError, KeyError) as exc:
+            raise HTTPException(422, "Invalid telemetry bundle: "+str(exc)[:240]) from None
+        finally:
+            slots.release()
+
     @app.get("/v1/alerts", dependencies=[Depends(authorized)])
     def list_alerts(status: Literal["all", "firing", "resolved"] = "all", q: str = Query(default="", max_length=128)):
         if inbox is None:
@@ -1109,6 +1192,22 @@ def create_app(token=None, thresholds=None, timeout=20, concurrency=2, source=No
         if not jobs.cancel(job_id):
             raise HTTPException(409, "Only queued diagnoses can be cancelled. Analysis may already have started.")
         return jobs.get(job_id)
+
+    @app.post("/v1/diagnoses/{job_id}/rerun", status_code=202, dependencies=[Depends(authorized)])
+    def rerun_saved_diagnosis(job_id: str):
+        if jobs is None:
+            raise HTTPException(404, "Diagnosis not found")
+        with jobs._db() as db:
+            row = db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Diagnosis not found")
+        if row["status"] in ("queued","running"):
+            raise HTTPException(409, "Wait for this investigation to finish")
+        context = json.loads(row["context"] or "{}")
+        if not context:
+            raise HTTPException(409, "This legacy diagnosis has no saved input configuration")
+        return jobs.add(row["method"],row["inject_time"],row["inject_time"]-row["start"],
+                        row["end"]-row["inject_time"],context=context,max_pending=max_pending)[0]
 
     @app.get("/v1/diagnoses/{job_id}", dependencies=[Depends(authorized)])
     def get_diagnosis(job_id: str):

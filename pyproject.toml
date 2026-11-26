@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,8 @@ name = "corca"
 version = "0.2.0"
 description = "Concurrent root-cause analysis for microservice telemetry"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "frontend/fonts/*-OFL.txt"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy>=1.26,<2",

@@ -58,7 +58,7 @@ def preflight(url, token=None, verify_metrics=False):
     source = metadata.get("prometheus", {})
     source = source if isinstance(source, dict) else {}
     for name, passed, detail in [
-        ("telemetry_configured", config.get("prometheus") is True and source.get("configured") is True, "Connect a metrics backend in Setup → Connect & verify"),
+        ("telemetry_configured", config.get("prometheus") is True and source.get("configured") is True, "Connect a metrics backend in Settings → Connect & verify"),
         ("service_scope", isinstance(source.get("service_count"), int) and source["service_count"] > 0, "Select and save services"),
         ("dependencies_confirmed", source.get("topology") == "custom", "Save actual caller/callee dependencies, or confirm independent services"),
         ("sensitivity_enabled", isinstance(config.get("methods"), list) and bool(config["methods"]) and all(m in ("baro", "circa") for m in config["methods"]), "Set sensitivity on Services"),

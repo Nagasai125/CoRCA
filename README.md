@@ -12,6 +12,9 @@ automatic remediation. SSO, MFA, and tenant isolation are not included.
 ## What it does
 
 - **Investigate incidents:** run metric-based diagnoses and review saved evidence.
+- **Combine telemetry:** import metrics with OTLP logs and traces, inspect observed
+  dependencies and model-based repair estimates, and assess candidate reliability
+  from confirmed earlier outcomes. See [joint investigations](docs/guides/joint-diagnosis.md).
 - **Receive alerts:** collect Alertmanager updates and link alerts to diagnoses.
 - **Analyze log files:** find recurring patterns, explore counts over time, and
   download reports. No monitoring connection is required; uploads are not retained.
@@ -24,6 +27,10 @@ Monitoring adapters: **Prometheus, Grafana Cloud Metrics, Datadog, Dynatrace,
 and New Relic**. OpenTelemetry can feed the connected metrics backend.
 
 ## Quick start
+
+For a reproducible defense workspace and evaluation pipeline, follow the
+[committee review guide](docs/guides/defense.md). It includes a short synthetic
+walkthrough and full recorded-data evaluation with baseline comparisons.
 
 Requires Git and a running Docker daemon with Docker Compose.
 
@@ -49,8 +56,8 @@ docker compose down           # Stop the app and preserve workspace data.
 
 ## First investigation
 
-1. Open **Setup → Connect & verify**, choose a provider, and verify its connection.
-2. Open **Setup → Services**, discover services, select the scope, and save
+1. Open **Settings → Connect & verify**, choose a provider, and verify its connection.
+2. Open **Settings → Services & sensitivity**, discover services, select the scope, and save
    caller → dependency relationships. Confirm an empty graph for independent services.
 3. Set investigation sensitivity for BARO, or load compatible calibration.
 4. Choose **Start a diagnosis**, enter the incident start time, and review results.
@@ -125,3 +132,8 @@ package checks, and the separation between application and research work.
 - [Operations](docs/guides/operations.md) — accounts, alerts, backups, and deployment.
 - [Customer pilot checklist](docs/guides/pilot.md) — validate your target environment.
 - [Changelog](CHANGELOG.md) — release and behavior changes.
+
+## License
+
+CoRCA's original code is licensed under the [MIT License](LICENSE). Bundled
+fonts retain their [separate licenses](frontend/fonts/README.md).

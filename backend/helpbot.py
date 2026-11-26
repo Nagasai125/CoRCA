@@ -126,7 +126,7 @@ class HelpBot:
             sources=sources[:1]
             answer=sources[0]['summary']
         if any(t['id']=='getting-started' for t in sources):
-            next_step = ('Ask an administrator to connect monitoring in Setup → Connect & verify.' if context['role']=='responder' else 'Connect monitoring in Setup → Connect & verify.') if not context['monitoring_connected'] else ('Ask an administrator to finish service scope and sensitivity.' if context['role']=='responder' else 'Finish service scope and sensitivity in Services.') if not context['methods'] else 'Open Diagnoses to start an investigation.'
+            next_step = ('Ask an administrator to connect monitoring in Settings → Connect & verify.' if context['role']=='responder' else 'Connect monitoring in Settings → Connect & verify.') if not context['monitoring_connected'] else ('Ask an administrator to finish service scope and sensitivity.' if context['role']=='responder' else 'Finish service scope and sensitivity in Settings → Services & sensitivity.') if not context['methods'] else 'Open Diagnoses to start an investigation.'
             answer='Your next step: '+next_step+'\n\n'+answer
         return self.result(answer,sources,'guide','AI is unavailable. Showing relevant product guides.' if unavailable else 'Guide answer — AI is not enabled.')
 

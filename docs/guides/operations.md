@@ -52,7 +52,7 @@ HTTP connection capacity does not increase analysis parallelism.
    no default password or public registration endpoint. This command enables
    sign-in immediately and refuses to bootstrap an existing account workspace.
    It does not restart the application or requeue running work.
-3. Reload `/app`, sign in, and open **Team & access**. Add named people with the
+3. Reload `/app`, sign in, and open **Settings → Team & access**. Add named people with the
    responder role unless they need to administer the deployment. Share initial
    passwords privately; each person can change their own password.
 4. Set `CORCA_REQUIRE_ACCOUNTS=1` in `.env` and run `docker compose up -d`.
@@ -279,7 +279,7 @@ is not provided. Choose volume capacity and backup retention for your team.
 
 ## Workspace navigation
 
-Diagnoses and the Setup connection/services tabs have separate shareable URLs under `/app`.
+Diagnoses and each Settings tab have separate shareable URLs under `/app`, including `/app?view=team` for Team & access.
 Navigation and browser Back/Forward do not depend on telemetry setup. Diagnoses
 shows missing prerequisites in place; its setup button navigates only when chosen.
 Services restores saved service scope and dependencies after reload, without

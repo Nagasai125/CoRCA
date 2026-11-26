@@ -15,8 +15,15 @@
   function stats(cases){
     const faults=cases.filter(c=>c.outcome==='fault'),times=cases.map(c=>c.seconds).filter(n=>Number.isFinite(n)&&n>=0);
     const bins=[0,0,0,0,0];
+    const setTotals={precision:0,recall:0,f1:0,complete:0};
+    for(const c of faults){
+      const predicted=['diagnosed','partial_unexplained','partial_timeout'].includes(c.status)?c.predicted:[],hits=c.truth.filter(s=>predicted.includes(s)).length;
+      const precision=predicted.length?hits/predicted.length:0,recall=c.truth.length?hits/c.truth.length:0;
+      setTotals.precision+=precision;setTotals.recall+=recall;setTotals.f1+=precision+recall?2*precision*recall/(precision+recall):0;
+      setTotals.complete+=c.status==='diagnosed'&&predicted.length===c.truth.length&&hits===c.truth.length?1:0;
+    }
     for(const c of faults){const r=rank(c);bins[!['diagnosed','partial_unexplained','partial_timeout','no_significant_anomaly'].includes(c.status) || (!c.predicted.length && c.status!=='no_significant_anomaly') ? 4 : r===1 ? 0 : r<=3 ? 1 : r<=5 ? 2 : 3]++;}
-    return {faults,times,bins,n:faults.length,top1:faults.filter(c=>rank(c)<=1).length,top3:faults.filter(c=>rank(c)<=3).length,miss:faults.filter(c=>rank(c)>5).length,median:quantile(times,.5),p90:quantile(times,.9)};
+    return {faults,times,bins,n:faults.length,setTotals,top1:faults.filter(c=>rank(c)<=1).length,top3:faults.filter(c=>rank(c)<=3).length,miss:faults.filter(c=>rank(c)>5).length,median:quantile(times,.5),p90:quantile(times,.9)};
   }
   function comparable(a,b){
     const labels=r=>JSON.stringify(r.cases.map(c=>[c.case_id,c.outcome,[...c.truth].sort(),c.fault_type]).sort((a,b)=>a[0].localeCompare(b[0])));
@@ -81,6 +88,9 @@
       runDate.textContent=run.completed_at?new Date(run.completed_at).toLocaleString():'';
       pipeline.replaceChildren(run.pipeline_url?h('a',{class:'btn',href:run.pipeline_url,target:'_blank',rel:'noopener noreferrer'},'Open pipeline ↗'):h('button',{type:'button',class:'btn',onclick:()=>openTools?.()},'Pipeline tools'));
       const checks=run.gates||[],failed=checks.filter(g=>g.status==='fail').length;
+      const setMetrics=h('div',{class:'eval-kpis ref-set-metrics'},
+        ...[['f1','Cause-set F1','Balances missed causes and extra candidates.'],['complete','Complete cause match','Every cause, no extras, and a completed diagnosis.'],['precision','Cause-set precision','How many returned candidates are actual causes.'],['recall','Cause-set recall','How many actual causes were recovered.']].map(([key,name,detail])=>
+          kpi(name,s.n?(key==='f1'?(s.setTotals[key]/s.n).toFixed(3):pct(s.setTotals[key],s.n)):'Not measured',detail,delta(s.setTotals[key],before?.setTotals[key],s.n,before?.n),null,`${s.n} fault incidents · failed cases included`)));
       const banner=h('div',{class:'ref-gate-banner'},h('span',{class:'ref-gate-pill '+(failed?'fail':'')},failed?'Gate failed':checks.length?'Checks reported':'Not assessed'),h('span',{},checks.length?`${checks.filter(g=>g.status==='pass').length} of ${checks.length} checks pass. ${checks.filter(g=>g.status==='fail').map(g=>g.name).join('; ')}`:'No acceptance thresholds were declared.'),h('button',{type:'button',class:'link-button',onclick:()=>checkPanel.scrollIntoView({block:'start',behavior:'auto'})},'See checks'));
       const history=evaluationHistory(usable,run);
       const trend=h('section',{class:'card'},h('h3',{},'Where the true cause landed'),h('p',{class:'hint'},history.length>1?`Each column is one run of ${s.n} labelled incidents.`:'One run available. Compare matching labelled runs as they arrive.'));
@@ -113,7 +123,7 @@
       const checkPanel=h('section',{class:'card setup-section'},h('h3',{},'Acceptance checks'));
       for(const check of checks){const top=check.name.toLowerCase().includes('top-3'),time=check.name.toLowerCase().includes('time');checkPanel.append(h('div',{class:'ref-check-row'},h('span',{class:'ref-check-pill '+check.status},check.status==='pass'?'Pass':check.status==='fail'?'Fail':'Not run'),h('strong',{},check.name),top?range(s.top3,s.n,before?.top3,before?.n,targets.top3):time?durationRange.cloneNode(true):h('span',{}),h('p',{},check.criterion)));}
       if(!checks.length)checkPanel.append(h('p',{class:'hint'},'No acceptance thresholds were declared for this cohort.'));
-      body.replaceChildren(banner,h('details',{class:'card setup-section',open:true},h('summary',{},'Evaluation scope & limitations'),h('p',{class:'hint'},run.scope),...(run.limitations||[]).map(note=>h('p',{class:'hint'},note))),metrics,h('div',{class:'eval-split'},trend,changes),grid,h('div',{class:'eval-split equal'},types,duration),checkPanel);
+      body.replaceChildren(banner,setMetrics,h('details',{class:'card setup-section',open:true},h('summary',{},'Evaluation scope & limitations'),h('p',{class:'hint'},run.scope),...(run.limitations||[]).map(note=>h('p',{class:'hint'},note))),h('details',{class:'card setup-section'},h('summary',{},'Ranking and runtime measurements'),metrics),h('div',{class:'eval-split'},trend,changes),grid,h('div',{class:'eval-split equal'},types,duration),checkPanel);
 
     }
     runSelect.addEventListener('change',()=>prepare(true));compare.addEventListener('change',render);prepare();
@@ -162,13 +172,14 @@
   async function diagnosis({host,h,job,api,fmtTime,fmtClock,review,logs,copyText,share,download,ask,rerun,back,draftText}){
     host.className='reference-layout ref-diagnosis';
     host.replaceChildren(h('p',{class:'hint'},'Loading saved evidence…'));
-    let data,outcomeReview;
-    try{const replies=await Promise.all([api(`/v1/diagnoses/${encodeURIComponent(job.id)}/evidence`),api(`/v1/diagnoses/${encodeURIComponent(job.id)}/review`)]);data=replies[0];outcomeReview=replies[1].review;}catch(error){if(host.isConnected)host.replaceChildren(h('p',{class:'error',role:'alert'},error.message),h('button',{type:'button',class:'btn',onclick:()=>diagnosis({host,h,job,api,fmtTime,fmtClock,review,logs,copyText,share,download,ask,rerun,back,draftText})},'Retry'));return;}
+    let data,outcomeReview,uncertainty;
+    try{const replies=await Promise.all([api('/v1/diagnoses/'+encodeURIComponent(job.id)+'/evidence'),api('/v1/diagnoses/'+encodeURIComponent(job.id)+'/review'),api('/v1/diagnoses/'+encodeURIComponent(job.id)+'/uncertainty').catch(()=>({available:false,reason:'Calibration could not be loaded.'}))]);data=replies[0];outcomeReview=replies[1].review;uncertainty=replies[2];}catch(error){if(host.isConnected)host.replaceChildren(h('p',{class:'error',role:'alert'},error.message),h('button',{type:'button',class:'btn',onclick:()=>diagnosis({host,h,job,api,fmtTime,fmtClock,review,logs,copyText,share,download,ask,rerun,back,draftText})},'Retry'));return;}
     if(!host.isConnected)return;
     const result=job.result||{},state=diagnosisState(job),roots=result.root_causes||[],rounds=result.rounds||[],unexplained=result.unexplained_services||[],series=data.series||[],edges=data.edges||[],alerts=data.alerts||[];
     const counts=new Map();for(const [caller] of edges)counts.set(caller,(counts.get(caller)||0)+1);
     const entry=alerts[0]?.service||[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0]||roots[0]||series[0]?.service;
     const root=roots[0],gaps=series.filter(s=>s.gaps?.length),missing=result.dropped_metrics||[],scope=[...new Set([...series.map(s=>s.service),...(data.scope||[]),...edges.flat()])];
+    const gapServices=[...new Set(gaps.map(s=>s.service))];
     let focused=entry,trace=entry?[entry]:[],mapOnly=new URLSearchParams(location.search).get('panel')==='map',cursor=job.inject_time;
     const first=series.find(s=>s.service===root),entrySignal=series.find(s=>s.service===entry),path=dependencyPath(edges,entry,root),latest=alerts[0];
     const noCause=job.status==='failed'?'The analysis did not complete.':result.status==='insufficient_evidence'?'Not enough usable metric data.':result.status==='no_significant_anomaly'?'Nothing crossed the configured diagnosis threshold.':'No cause was named before analysis stopped.';
@@ -177,18 +188,18 @@
     const heading=h('h1',{},title),subtitle=h('p',{class:'ref-subtitle'},latest?'Start at the alerting service. Follow its dependencies and compare the saved evidence.':'Follow saved call relationships and compare metric signals. These relationships alone do not establish a cause.');
     const badge=h('span',{class:'ref-badge '+(alerts.some(a=>a.status==='firing')?'red':'')},alerts.some(a=>a.status==='firing')?'● Firing':state.badge);
     const metadata=h('div',{class:'ref-incident-meta'},badge,h('span',{class:'mono'},'Started '+fmtTime(job.inject_time)),h('span',{class:'mono'},'Diagnosis #'+job.id.slice(0,8)+(Number.isFinite(result.time_to_result_seconds)?' ready at '+fmtClock(job.created_at+result.time_to_result_seconds):'')),fixture?h('span',{class:'ref-badge'},'Synthetic fixture'):null);
-    const draft=h('textarea',{'aria-label':'Incident status draft'});draft.value=`${entry||'Incident'} · ${fmtTime(job.inject_time)}. ${root?'CoRCA points to '+root+' first. '+(path.length?'Dependency path: '+path.join(' → ')+'. ':''):'No candidate cause was named. '}${unexplained.length?'Still unexplained: '+unexplained.join(', ')+'. ':''}${gaps.length?'Missing samples: '+gaps.map(s=>s.service).join(', ')+'. ':''}Next: ${root?'inspect '+root+' metrics and recent changes':'verify incident timing and service coverage'}. Findings need independent confirmation.`;
+    const draft=h('textarea',{'aria-label':'Incident status draft'});draft.value=`${entry||'Incident'} · ${fmtTime(job.inject_time)}. ${root?'CoRCA points to '+root+' first. '+(path.length?'Dependency path: '+path.join(' → ')+'. ':''):'No candidate cause was named. '}${unexplained.length?'Still unexplained: '+unexplained.join(', ')+'. ':''}${gaps.length?'Missing samples: '+gapServices.join(', ')+'. ':''}Next: ${root?'inspect '+root+' metrics and recent changes':'verify incident timing and service coverage'}. Findings need independent confirmation.`;
     if(typeof draftText==='string')draft.value=draftText;
     const tools=h('div',{class:'ref-incident-tools'},h('span',{class:'hint'},'● Saved evidence'),h('button',{type:'button',class:'btn',onclick:()=>copyText(draft.value)},'Copy update'),h('button',{type:'button',class:'btn',onclick:ask},'Ask CoRCA'));
     const tabButtons=[h('button',{type:'button',onclick:()=>switchView(false)},'Summary'),h('button',{type:'button',onclick:()=>switchView(true)},'Service map')];
     const tabs=h('div',{class:'ref-segment',role:'group','aria-label':'Diagnosis view'},...tabButtons);
     const pagehead=h('div',{class:'ref-diagnosis-heading'},h('div',{},metadata,heading,subtitle),h('div',{class:'ref-heading-right'},tools,tabs));
-    const uncertaintyCount=unexplained.length+gaps.length;
+    const uncertaintyCount=new Set([...unexplained,...gapServices]).size;
     const strip=h('section',{class:'ref-summary-strip'},
       h('div',{},h('span',{class:'eyebrow'},'Look first'),h('strong',{class:'ref-root mono'},root||'No candidate'),h('p',{},root?metricSummary(first):noCause)),
       h('div',{},h('span',{class:'eyebrow'},'Why we think so'),h('strong',{},root?`${rounds.find(r=>r.service===root)?.explained?.length||0} linked service symptoms`:'No cause named'),h('p',{},path.length?path.join(' → '):root?'Review its captured signal and candidate score.':'Results still need an independently verified outcome.')),
       h('div',{},h('span',{class:'eyebrow'},'Do next'),h('strong',{},root?(first?.metric.includes('connection')?'Check the connection pool':'Inspect '+root):'Check timing and coverage'),h('p',{},unexplained.length?'Then inspect '+unexplained[0]+' logs.':'Review recent deployments and configuration.')),
-      h('div',{},h('span',{class:'eyebrow'},'Not sure about'),h('strong',{},uncertaintyCount?`${uncertaintyCount} open questions`:'No gaps reported'),h('p',{},[gaps.length?`${gaps.length} service${gaps.length===1?'':'s'} with missing samples`:null,unexplained.length?`${unexplained.length} unexplained symptom${unexplained.length===1?'':'s'}`:null].filter(Boolean).join('. ')||'Confidence depends on the available telemetry.')));
+      h('div',{},h('span',{class:'eyebrow'},'Not sure about'),h('strong',{},uncertaintyCount?`${uncertaintyCount} open questions`:'No gaps reported'),h('p',{},[gaps.length?`${gapServices.length} service${gapServices.length===1?'':'s'} with missing samples`:null,unexplained.length?`${unexplained.length} unexplained symptom${unexplained.length===1?'':'s'}`:null].filter(Boolean).join('. ')||'Confidence depends on the available telemetry.')));
     if(!root){
       const coverage=evidenceCoverage(data,job.inject_time),failed=state.incomplete,insufficient=result.status==='insufficient_evidence';
       strip.classList.add('ref-summary-outcome');
@@ -206,7 +217,7 @@
     const legend=h('div',{class:'ref-legend'},...[[colors[0],'Candidate cause'],['#d93025','Alerting symptom'],['#e98200','Missing data / unexplained'],['#9aa0a6','No candidate designation']].map(([color,text])=>h('span',{},h('i',{style:`--legend:${color}`}),text)));
     const graphCard=h('section',{class:'card ref-map-card'},mapHead,traceBar,graph,replayBar,legend);
     const evidence=h('section',{class:'card ref-evidence'},h('div',{class:'ref-card-head'},h('h2',{},'Evidence on one clock'),h('span',{class:'hint'},'Every signal shares the same time axis. The cursor follows Replay.')));
-    const priority=[...new Set([root,...roots.slice(1).filter(name=>!gaps.some(s=>s.service===name)),entry,...roots.filter(name=>gaps.some(s=>s.service===name)),...unexplained,...series.map(s=>s.service)])],ordered=priority.map(name=>series.find(s=>s.service===name)).filter(Boolean),readouts=[];
+    const priority=[...new Set([root,...roots.slice(1).filter(name=>!gaps.some(s=>s.service===name)),entry,...roots.filter(name=>gaps.some(s=>s.service===name)),...unexplained,...series.map(s=>s.service)])],ordered=priority.flatMap(name=>series.filter(s=>s.service===name)),readouts=[];
     const valueAt=(item,t)=>{if((item.gaps||[]).some(([a,b])=>a<=t&&t<=b))return 'no data';const point=item.points.reduce((best,p)=>Math.abs(p[0]-t)<Math.abs(best[0]-t)?p:best,item.points[0]);return Number.isFinite(point?.[1])?number(point[1]):'not recorded';};
     const signals=h('div',{}),moreSignals=h('details',{class:'ref-more-signals'},h('summary',{},`More signals · ${Math.max(0,ordered.length-5)}`));
     ordered.forEach((item,i)=>{const value=h('output',{},valueAt(item,cursor)),chart=signalChart(item,job,cursor,fmtClock);chart.classList.add('ref-signal-chart');const tone=alerts.some(a=>a.service===item.service)?'#d93025':unexplained.includes(item.service)?'#e98200':'#0b57d0';chart.querySelector('path[stroke="#0b57d0"]')?.setAttribute('stroke',tone);if(unexplained.includes(item.service))chart.querySelector('path[stroke="#e98200"]')?.setAttribute('stroke-dasharray','4 3');const row=h('div',{class:'ref-signal-row'},h('div',{},h('strong',{class:'mono'},item.service),h('small',{},item.metric+' · ',value)),chart);readouts.push({item,value});(i<5?signals:moreSignals).append(row);});
@@ -222,12 +233,39 @@
     const gapDetails=h('details',{class:'ref-gap-details'},h('summary',{},'Affected services & times'));
     for(const item of gaps)gapDetails.append(h('p',{},h('strong',{class:'mono'},item.service),': no samples '+fmtClock(item.gaps[0][0])+'–'+fmtClock(item.gaps.at(-1)[1])));
     for(const name of unexplained)gapDetails.append(h('p',{},h('strong',{class:'mono'},name),': unexplained symptom. No candidate was reported to explain it.'));
-    if(gaps.length||unexplained.length)blind.append(h('p',{},`Gaps: ${gaps.length} service${gaps.length===1?'':'s'} · Unexplained symptoms: ${unexplained.length}`),gapDetails);
+    if(gaps.length||unexplained.length)blind.append(h('p',{},`Gaps: ${gapServices.length} service${gapServices.length===1?'':'s'} · Unexplained symptoms: ${unexplained.length}`),gapDetails);
     if(!gaps.length&&!unexplained.length)blind.append(h('p',{},missing.length?`${missing.length} metric streams were dropped.`:'No gaps or unexplained services were reported.'));
-    const covered=series.filter(s=>s.points.some(p=>p[1]!==null)).length,total=scope.length;
+    const covered=new Set(series.filter(s=>s.points.some(p=>p[1]!==null)).map(s=>s.service)).size,total=scope.length;
     blind.append(h('div',{class:'ref-coverage'},h('span',{},'Captured data'),h('span',{class:'mono'},`${covered} / ${total} services`)),h('div',{class:'quality-track'},h('div',{class:'quality-fill',style:`width:${total?covered/total*100:0}%`})));
     const status=h('section',{class:'card ref-status'},h('div',{class:'ref-card-head'},h('h2',{},'Status update'),h('span',{class:'hint'},'Draft · edit before copying')),draft,h('div',{class:'actions'},h('button',{type:'button',class:'btn',onclick:()=>copyText(draft.value)},'Copy text'),h('button',{type:'button',class:'btn',onclick:share},'Copy link'),h('button',{type:'button',class:'btn',onclick:download,'aria-label':'Download diagnosis evidence'},'↓')));
     const main=h('div',{class:'ref-investigation-main'},graphCard,evidence),side=h('aside',{class:'ref-investigation-side'},root?next:h('details',{class:'card ref-optional'},h('summary',{},'Investigation checklist'),next),blind,root?status:h('details',{class:'card ref-optional'},h('summary',{},'Draft a status update'),status)),columns=h('div',{class:'ref-investigation-columns'},main,side);
+    const analysisCards=[];
+    if(result.fusion){
+      const f=result.fusion,t=f.topology||{},fusionCard=h('section',{class:'card'},h('h2',{},'Combined telemetry'),h('p',{},'Used: '+(f.used_modalities||[]).join(', ')),h('p',{},String(f.span_count||0)+' spans · '+String(f.log_count||0)+' log records · '+String(f.linked_log_count||0)+' logs linked to spans'));
+      fusionCard.append(h('p',{},String((t.added||[]).length)+' dependencies newly observed during the incident. '+String((t.not_observed_during_incident||[]).length)+' normal-window dependencies were not observed again; this does not prove removal.'));
+      for(const note of f.notes||[])fusionCard.append(h('p',{class:'hint'},note));
+      if(f.discarded_columns?.length)fusionCard.append(h('p',{class:'hint'},f.discarded_columns.length+' sparse streams excluded by the quality filter.'));
+      main.append(fusionCard);analysisCards.push(fusionCard);
+    }
+    if(roots.length){
+      const calibrated=h('section',{class:'card'},h('h2',{},'Candidate reliability'));
+      if(uncertainty?.available){
+        for(const candidate of uncertainty.candidates||[])calibrated.append(h('p',{},h('strong',{class:'mono'},candidate.service),': '+(Number.isFinite(candidate.probability)?Math.round(candidate.probability*100)+'% estimated correctness':candidate.reason)));
+        calibrated.append(h('p',{class:'hint'},uncertainty.validation.training_incidents+' training incidents · '+uncertainty.validation.incidents+' held-out incidents · Brier score '+uncertainty.validation.brier_score.toFixed(3)),h('p',{class:'hint'},uncertainty.scope));
+      }else calibrated.append(h('p',{},uncertainty?.reason||'Confirmed outcomes are needed to estimate reliability.'),h('p',{class:'hint'},String(uncertainty?.eligible_incidents||0)+' eligible earlier incidents.'),h('button',{type:'button',class:'btn',onclick:()=>review()},'Review this outcome'));
+      side.append(calibrated);
+    }
+    if(result.structural_model){
+      const model=result.structural_model,card=h('section',{class:'card'},h('h2',{},'Estimated effect of repair'));
+      if(!model.available)card.append(h('p',{},model.reason||'Insufficient evidence for a repair estimate.'));
+      for(const repair of model.repairs||[]){
+        card.append(h('h3',{},'If '+repair.service+' returns to its normal level'));
+        const effects=[...repair.effects].sort((a,b)=>Math.abs(b.estimated_reduction)-Math.abs(a.estimated_reduction)).slice(0,6);
+        for(const effect of effects)card.append(h('p',{},h('strong',{class:'mono'},effect.service),' · '+effect.metric+': '+number(effect.observed)+' → '+number(effect.after_repair)));
+      }
+      card.append(h('p',{class:'hint'},model.note),h('details',{},h('summary',{},'Model assumptions'),h('p',{},(model.assumptions||[]).join('; '))));
+      main.append(card);analysisCards.push(card);
+    }
     const candidates=h('section',{class:'card ref-candidates'},h('div',{class:'ref-card-head'},h('h2',{},root?'Candidates':'Outcome review'),root?h('span',{class:'hint'},'Relative scores, not probabilities.'):null));
     const table=h('table',{},h('caption',{class:'sr'},'Candidate causes and independent outcome review'),h('thead',{},h('tr',{},...['#','Service','Relative score','Evidence','Explains the alert?','Your call'].map(text=>h('th',{scope:'col'},text))))),tbody=h('tbody',{}),maxScore=Math.max(0,...rounds.map(r=>Number.isFinite(r.score)?r.score:0));
     roots.forEach((name,i)=>{const round=rounds.find(r=>r.service===name),item=series.find(s=>s.service===name),score=round?.score,dep=dependencyPath(edges,entry,name);tbody.append(h('tr',{},h('td',{},String(i+1)),h('td',{},h('strong',{class:'mono'},name),h('small',{},item?metricSummary(item):'No captured metric')),h('td',{},h('div',{class:'ref-score'},h('div',{class:'quality-track'},h('div',{class:'quality-fill',style:`width:${maxScore&&Number.isFinite(score)?Math.max(0,score)/maxScore*100:0}%`})),h('span',{class:'mono'},number(score)))),h('td',{class:item?.gaps?.length?'ref-amber':'ref-blue'},item?.gaps?.length?'Data gap':item?'Captured signal':'Not captured'),h('td',{},round?.explained?.includes(entry)?'Yes'+(dep.length>2?', via '+dep[1]:', directly'):'Not reported'),h('td',{},h('div',{class:'ref-review-actions'},h('button',{type:'button',class:'btn ref-confirm',onclick:()=>review(name,'confirm')},outcomeReview?.outcome==='fault'&&outcomeReview.root_causes.includes(name)?'Confirmed':'Confirm'),h('button',{type:'button',class:'btn',onclick:()=>review(name,'rule_out')},outcomeReview&&outcomeReview.outcome!=='unconfirmed'&&!outcomeReview.root_causes.includes(name)?'Ruled out':'Rule out')))));});table.append(tbody);
@@ -258,7 +296,7 @@
       inspector.append(h('div',{class:'ref-inspector-actions'},h('button',{type:'button',class:'btn',onclick:()=>{switchView(false);evidence.scrollIntoView({block:'start'});}},'Full evidence'),h('button',{type:'button',class:'btn',onclick:()=>logs(focused)},'Analyze its logs')));
     }
     replay.addEventListener('input',()=>{cursor=Number(replay.value);clock.textContent=fmtClock(cursor);replay.setAttribute('aria-valuetext',fmtTime(cursor));for(const {item,value} of readouts)value.textContent=valueAt(item,cursor);for(const line of host.querySelectorAll('[data-replay-cursor]')){const x=12+(cursor-Number(line.dataset.start))/(Number(line.dataset.end)-Number(line.dataset.start))*606;line.setAttribute('x1',x);line.setAttribute('x2',x);}});
-    function switchView(value){mapOnly=value;const crumb=document.getElementById('breadcrumb-page');if(crumb)crumb.replaceChildren(h('button',{type:'button',class:'link-button',onclick:back},'Diagnoses'),h('span',{},' / #'+job.id.slice(0,8)+(value?' / Service map':'')));host.classList.toggle('is-map',value);heading.textContent=value?(root?'Trace the root cause':'Explore service dependencies'):title;subtitle.hidden=!value;metadata.hidden=value;strip.hidden=value;side.hidden=value;evidence.hidden=value;candidates.hidden=value||job.status==='cancelled';technical.hidden=value;replayBar.hidden=value;mapHead.hidden=value;traceBar.hidden=!value;inspector.hidden=!value;tools.hidden=value;for(const [i,button] of tabButtons.entries())button.setAttribute('aria-pressed',String(value===(i===1)));if(value)main.append(inspector);else inspector.remove();const url=new URL(location.href);if(value)url.searchParams.set('panel','map');else url.searchParams.delete('panel');history.replaceState(null,'',url);drawMap();}
+    function switchView(value){mapOnly=value;analysisCards.forEach(card=>card.hidden=value);const crumb=document.getElementById('breadcrumb-page');if(crumb)crumb.replaceChildren(h('button',{type:'button',class:'link-button',onclick:back},'Diagnoses'),h('span',{},' / #'+job.id.slice(0,8)+(value?' / Service map':'')));host.classList.toggle('is-map',value);heading.textContent=value?(root?'Trace the root cause':'Explore service dependencies'):title;subtitle.hidden=!value;metadata.hidden=value;strip.hidden=value;side.hidden=value;evidence.hidden=value;candidates.hidden=value||job.status==='cancelled';technical.hidden=value;replayBar.hidden=value;mapHead.hidden=value;traceBar.hidden=!value;inspector.hidden=!value;tools.hidden=value;for(const [i,button] of tabButtons.entries())button.setAttribute('aria-pressed',String(value===(i===1)));if(value)main.append(inspector);else inspector.remove();const url=new URL(location.href);if(value)url.searchParams.set('panel','map');else url.searchParams.delete('panel');history.replaceState(null,'',url);drawMap();}
     host.replaceChildren(pagehead,strip,columns,candidates,technical);switchView(mapOnly);
   }
   globalThis.CoRCAVisuals={rank,stats,comparable,interval,declaredTargets,evaluationRuns,evaluationHistory,dependencyPath,metricSummary,evidenceCoverage,diagnosisState,evaluations,diagnosis};

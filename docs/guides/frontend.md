@@ -19,8 +19,7 @@ color. Respect keyboard focus and reduced-motion settings.
 | Diagnoses | Choose an incident time, start work, review history and evidence |
 | Log analysis | Upload a file, inspect patterns and time buckets, download a report |
 | Evaluations | Review published quality evidence, sample counts, and acceptance checks |
-| Setup | Connect monitoring, discover services, save dependencies and sensitivity |
-| Team & access | Manage accounts and roles when individual access is enabled |
+| Settings | Connect monitoring, discover services, and save dependencies and sensitivity. Open Team & access here to manage accounts and roles. |
 | Ask CoRCA | Read platform guidance and optional AI answers in a drawer |
 
 Internal query-string view names retain compatibility with existing links;

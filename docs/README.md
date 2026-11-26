@@ -13,6 +13,7 @@ from research procedures and historical validation reports.
 | Prepare a customer pilot | [Pilot checklist](guides/pilot.md), [case template](guides/pilot-cases.example.json) |
 | Understand the stack | [Architecture diagram](architecture/corca-stack-diagram.html) |
 | Run research or benchmark evaluations | [Research workflow](research/workflow.md), [evaluation runbook](research/evaluation.md) |
+| Prepare the defense and committee evaluation | [Committee review workflow](guides/defense.md) |
 | Validate the local lab's memory gate | [Memory stability](research/memory-stability.md), [lab setup](../lab/README.md) |
 
 ## Keeping documentation current

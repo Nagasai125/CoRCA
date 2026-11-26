@@ -46,6 +46,8 @@ def prediction(job):
 def cohort(job, evidence_kind):
     # Hash the saved configuration; never expose provider credentials in summaries.
     context = json.loads(job['context']) if job['context'] else {'unknown_configuration_for':job['id']}
+    if context.get('analysis_profile'):
+        context = {'analysis_profile': context['analysis_profile']}
     settings = [job['method'], context, job['inject_time']-job['start'], job['end']-job['inject_time']]
     key = hashlib.sha256(json.dumps(settings,sort_keys=True).encode()).hexdigest()[:16]
     return key+':'+evidence_kind

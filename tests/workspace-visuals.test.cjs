@@ -29,6 +29,15 @@ test('comparisons require frozen case labels, dataset, evidence, and scope',()=>
   assert.match(visuals.interval(1,1),/21–100%/);
 });
 
+test('cause-set metrics penalize extra causes, retain failures, and distinguish partial completion',()=>{
+  const s=visuals.stats([incident({truth:['db','cache'],predicted:['db','wrong'],status:'partial_unexplained'}),incident({status:'failed'}),incident(),incident({outcome:'healthy',truth:[],predicted:[],status:'no_significant_anomaly'})]);
+  assert.equal(s.n,3);
+  assert.equal(s.setTotals.precision,1.5);assert.equal(s.setTotals.recall,1.5);assert.equal(s.setTotals.f1,1.5);
+  assert.equal(s.setTotals.complete,1);
+  const partial=visuals.stats([incident({status:'partial_timeout'})]);
+  assert.equal(partial.setTotals.f1,1);assert.equal(partial.setTotals.complete,0);
+});
+
 test('service traces use configured paths and stop on cycles',()=>{
   const edges=[['checkout','cart'],['cart','db'],['db','cart']];
   assert.deepEqual(Array.from(visuals.dependencyPath(edges,'checkout','db')),['checkout','cart','db']);

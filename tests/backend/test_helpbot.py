@@ -31,7 +31,7 @@ def test_guide_mode_no_network_follow_up_unknown_and_no_mutations(tmp_path):
     with TestClient(create_app(db_path=tmp_path/'workspace.db',help_bot=bot)) as client:
         assert client.get('/v1/help').json()['ai_enabled'] is False
         answer=client.post('/v1/help/ask',json={'question':'Where do I start?'}).json()
-        assert answer['mode']=='guide' and 'Connect monitoring in Setup → Connect & verify' in answer['answer']
+        assert answer['mode']=='guide' and 'Connect monitoring in Settings → Connect & verify' in answer['answer']
         answer=client.post('/v1/help/ask',json={'question':'And then?', 'history':[{'role':'user','content':'How do I upload logs?'}]}).json()
         assert answer['sources'][0]['id']=='logs'
         answer=client.post('/v1/help/ask',json={'question':'xyzzy foobar quux'}).json()

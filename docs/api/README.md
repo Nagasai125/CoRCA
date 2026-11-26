@@ -151,6 +151,9 @@ hostname and allow it on the server as described in operations. Next:
 
 | Method | Path | Access | Request and behavior |
 | --- | --- | --- | --- |
+| `POST` | `/v1/diagnoses/import` | user | `TelemetryBundle`; HTTP 202; aligns uploaded metric/log/trace evidence and queues an immutable investigation |
+| `POST` | `/v1/diagnoses/{job_id}/rerun` | user | HTTP 202; reuses saved inputs/configuration after the original finishes |
+| `GET` | `/v1/diagnoses/{job_id}/uncertainty` | user | Candidate correctness estimates from independent earlier confirmed outcomes, or an explicit unavailable reason |
 | `POST` | `/v1/diagnoses` | user | `WindowRequest`; HTTP 202 with the queued job |
 | `GET` | `/v1/diagnoses` | user | Most recent jobs; `limit` 1–200, default 20; returns an array |
 | `GET` | `/v1/diagnoses/{job_id}` | user | One job; 404 for unknown IDs |
@@ -393,3 +396,5 @@ Update this guide for authorization, response semantics, examples, and behaviora
 validators that OpenAPI cannot express. The snapshot describes this source
 revision; use the running deployment's protected schema when integrating with a
 different release. Static docs never include customer configuration or secrets.
+
+Joint import formats, topology behavior, repair estimates, and probability calibration are described in [joint telemetry investigations](../guides/joint-diagnosis.md).

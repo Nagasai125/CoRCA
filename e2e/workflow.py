@@ -53,7 +53,11 @@ def open_app(p, path="/app", **kw):
 
 
 def nav(page, view):
-    page.locator(f'nav [data-view="{view}"], aside [data-view="{view}"]').first.click()
+    if view in ('services', 'team'):
+        page.locator('.sidebar [data-view="integrations"]').click()
+        page.locator(f'.setup-tabs [data-view="{view}"]').click()
+    else:
+        page.locator(f'.sidebar [data-view="{view}"]').click()
     page.wait_for_timeout(400)
 
 

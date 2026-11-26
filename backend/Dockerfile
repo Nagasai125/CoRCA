@@ -3,7 +3,7 @@ WORKDIR /app
 ENV OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
 COPY backend/requirements.lock backend/rcaeval.lock /tmp/
 RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock && pip install --no-cache-dir --no-deps --require-hashes -r /tmp/rcaeval.lock
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md LICENSE ./
 COPY corca ./corca
 COPY backend ./backend
 COPY frontend ./frontend
