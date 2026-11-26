@@ -72,6 +72,28 @@ def main():
         page.click('#import-open')
         expect(page.locator('#import-submit')).to_be_visible()
         assert page.locator('#import-dialog').evaluate('(e)=>e.scrollWidth<=e.clientWidth')
+        streams = fixture()
+        bundle = {'incident': streams['metrics'], 'logs': streams['logs'], 'traces': streams['traces']}
+        page.fill('#import-environment', 'wrapped-browser-check')
+        page.set_input_files('#import-metrics', {'name':'bundle.json', 'mimeType':'application/json', 'buffer':json.dumps(bundle).encode()})
+        with page.expect_response(lambda r: r.url.endswith('/v1/diagnoses/import') and r.request.method=='POST') as imported:
+            page.click('#import-submit')
+        assert imported.value.status == 202, imported.value.text()
+        wrapped = completed(imported.value.json()['id'])
+        path = '/v1/diagnoses/' + wrapped['id']
+        evidence = page.request.get(args.url + path + '/evidence').json()
+        assert {s['modality'] for s in evidence['series']} == {'metrics', 'logs', 'traces'}
+        for status in ('failed', 'cancelled'):
+            # Present a result-less history row without racing the worker; the rerun API is real.
+            page.route('**/v1/diagnoses?limit=200', lambda route: route.fulfill(json=[dict(wrapped, status=status, result=None)]))
+            page.goto(args.url + '/app?view=diagnoses#' + wrapped['id'])
+            page.reload()
+            page.locator('#detail .ref-technical summary').click()
+            with page.expect_response(lambda r: r.url.endswith(path+'/rerun') and r.request.method=='POST') as retry:
+                page.get_by_role('button', name='Re-run diagnosis', exact=True).click()
+            assert retry.value.status == 202, retry.value.text()
+            page.unroute('**/v1/diagnoses?limit=200')
+            assert completed(retry.value.json()['id'])['result']['fusion'] == wrapped['result']['fusion']
         assert not errors, errors
         browser.close()
     print('PASS: real import, evidence, repair estimate, calibration abstention, download, immutable rerun, mobile layout; no JavaScript errors.')

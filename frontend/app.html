@@ -566,7 +566,7 @@ progress.setup-progress::-moz-progress-bar { background:var(--root); border-radi
         <p>Combine a metric window with OpenTelemetry logs and traces. Observed trace relationships update this investigation's service map.</p>
         <label class="field" for="import-environment">Environment</label><input id="import-environment" maxlength="100" placeholder="For example, boutique-staging" required>
         <label class="field" for="import-metrics">Metrics window · JSON</label><input id="import-metrics" type="file" accept=".json,application/json" required>
-        <p class="hint">Include columns, rows, and inject_time in Unix seconds. Include edges if no traces are supplied; [] confirms independent services.</p>
+        <p class="hint">Include columns, rows, and inject_time in Unix seconds. Include edges if no traces are supplied; [] confirms independent services. You can also upload a bundle with incident, logs, and traces. A separate log or trace file replaces that stream in the bundle.</p>
         <label class="field" for="import-traces">Traces · OTLP JSON or JSONL (optional)</label><input id="import-traces" type="file" accept=".json,.jsonl,.ndjson">
         <label class="field" for="import-logs">Logs · OTLP JSON or JSONL (optional)</label><input id="import-logs" type="file" accept=".json,.jsonl,.ndjson">
         <div class="two"><div><label class="field" for="import-method">Localizer</label><select id="import-method"><option value="baro">BARO</option><option value="circa">CIRCA adapter</option></select></div><div><label class="field" for="import-tau">Combined-evidence sensitivity</label><input id="import-tau" type="number" min="0.1" max="1000" step="any" value="6"></div></div>
@@ -589,7 +589,7 @@ progress.setup-progress::-moz-progress-bar { background:var(--root); border-radi
       </div></details>
     </section>
     <section id="view-logs" class="page" hidden aria-labelledby="logs-title">
-      <div class="pagehead"><div><h1 id="logs-title">Log analysis</h1><p>Upload a log file to find recurring errors and review when they occurred.</p></div></div>
+      <div class="pagehead"><div><h1 id="logs-title" tabindex="-1">Log analysis</h1><p>Upload a log file to find recurring errors and review when they occurred.</p></div></div>
       <details id="logs-options" open><summary>File &amp; analysis options</summary><form class="card" id="logs-form"><label class="field" for="logs-file">Log file</label><input id="logs-file" type="file" accept=".log,.txt,.jsonl,.ndjson" required aria-describedby="logs-file-help"><p class="hint" id="logs-file-help">UTF-8 text or JSON lines · up to 2 MB. Uploads and reports are not stored on the server.</p>
       <details class="more"><summary>Incident context (optional)</summary><div class="form-grid setup-body"><div><label class="field" for="logs-start">Incident start</label><input id="logs-start" type="datetime-local" step="1"><p class="hint">Compare error counts before and after this time.</p></div><div><label class="field" for="logs-service">Service name</label><input id="logs-service" type="text" maxlength="128" placeholder="e.g. checkout"><p class="hint">Used for entries without a service name.</p></div></div></details>
       <div class="actions"><button class="btn primary" id="logs-analyze" type="submit">Analyze logs</button></div><p class="error" id="logs-error" role="alert"></p><p id="logs-progress" class="inline-note" role="status"></p></form></details>
@@ -905,10 +905,7 @@ OTEL_METRIC_EXPORT_INTERVAL=15000</pre><p class="hint">Configure the Collector�
 
   async function rerun(job) {
     try {
-      const created = job.result?.input_kind==="uploaded_telemetry" ? await api("/v1/diagnoses/"+encodeURIComponent(job.id)+"/rerun",{method:"POST"}) : await api("/v1/diagnoses", { method: "POST", body: JSON.stringify({
-        inject_time: job.inject_time, method: job.method,
-        normal_seconds: Math.round(job.inject_time - job.window[0]),
-        anomaly_seconds: Math.round(job.window[1] - job.inject_time) }) });
+      const created = await api("/v1/diagnoses/"+encodeURIComponent(job.id)+"/rerun",{method:"POST"});
       toast("Diagnosis started again.");
       selected = created.id; await refresh(); select(created.id, true);
     } catch (e) { if (e.status !== 401) toast(e.message); }
@@ -935,7 +932,8 @@ OTEL_METRIC_EXPORT_INTERVAL=15000</pre><p class="hint">Configure the Collector�
     try{
       const parsed=await read(metrics),incident=parsed?.incident||parsed;
       if(!incident||Array.isArray(incident)||!Array.isArray(incident.columns)||!Array.isArray(incident.rows))throw new Error("The metrics file needs columns, rows, and inject_time.");
-      const body={environment,incident:{...incident,method:$("import-method").value,tau},traces:await read(traces),logs:await read(logs)};
+      const body={environment,incident:{...incident,method:$("import-method").value,tau},
+        traces:traces?await read(traces):parsed.traces,logs:logs?await read(logs):parsed.logs};
       const job=await api("/v1/diagnoses/import",{method:"POST",body:JSON.stringify(body)});
       $("import-dialog").close();$("import-form").reset();selected=job.id;await refresh();select(job.id,true);
       toast("Imported evidence queued for diagnosis.");
@@ -1036,6 +1034,7 @@ OTEL_METRIC_EXPORT_INTERVAL=15000</pre><p class="hint">Configure the Collector�
     $("breadcrumb-group").textContent = (["integrations","services","team"].includes(view) ? "Administration" : view === "quality" ? "Quality" : view === "about" ? "Product" : "Investigate")+" /";
     $("breadcrumb-page").textContent = names[view];
     if (changed) window.scrollTo({top:0,behavior:"instant"});
+    if (changed && updateURL && view === "logs") $("logs-title").focus({preventScroll:true});
     document.title = `${names[view]} · CoRCA`;
     const url = `?view=${view}${view === "diagnoses" && selected ? "#"+encodeURIComponent(selected) : ""}`;
     if (updateURL && location.search+location.hash !== url) history.pushState(null,"",url);
@@ -1747,10 +1746,12 @@ OTEL_METRIC_EXPORT_INTERVAL=15000</pre><p class="hint">Configure the Collector�
   let outcomeSequence=0,qualityCaseReports=[],updateOutcomeDashboard=null;
   const qualityDashboardState={},qualityReviewState={open:false,before:null};
   async function openOutcomeReview(identifier,host,suggestion=null) {
-    host.replaceChildren(h("p",{class:"hint"},"Loading outcome review…"));
+    const loading=h("p",{class:"hint"},"Loading outcome review…");
+    const isCurrent=node=>host.isConnected && host.firstElementChild===node;
+    host.replaceChildren(loading);
     try {
       const [job,reply]=await Promise.all([api(`/v1/diagnoses/${encodeURIComponent(identifier)}`),api(`/v1/diagnoses/${encodeURIComponent(identifier)}/review`)]);
-      if(!host.isConnected)return;
+      if(!isCurrent(loading))return;
       const review=reply.review;
       const outcome=h("select",{required:true,"aria-label":"Confirmed outcome"},h("option",{value:"unconfirmed"},"Unconfirmed · leave unscored"),h("option",{value:"fault"},"Confirmed fault"),h("option",{value:"healthy"},"Confirmed healthy window"));
       outcome.value=review?.outcome || "unconfirmed";
@@ -1768,18 +1769,20 @@ OTEL_METRIC_EXPORT_INTERVAL=15000</pre><p class="hint">Configure the Collector�
       form.append(h("button",{type:"button",class:"btn quiet",onclick:()=>openOutcomeReview(identifier,host)},"Reload review"));
       if(review)form.prepend(h("p",{class:"hint"},`Reviewed by ${review.reviewer} · ${fmtTime(review.reviewed_at)} · revision ${review.revision}. Changes are audited. Choose Unconfirmed to withdraw this label.`));
       form.addEventListener("submit",async event=>{
-        event.preventDefault();error.textContent="";busy(submit,true);
+        event.preventDefault();if(!isCurrent(form))return;
+        error.textContent="";busy(submit,true);
         try {
           await api(`/v1/diagnoses/${encodeURIComponent(identifier)}/review`,{method:"POST",body:JSON.stringify({revision:review?.revision || 0,outcome:outcome.value,evidence_kind:source.value,root_causes:outcome.value==="fault" ? causes.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean) : [],evidence:evidence.value})});
+          if(!isCurrent(form))return;
           toast("Outcome saved. Evaluations use confirmed evidence only.");
           const dialog=host.closest?.(".ref-review-dialog");
           if(dialog){const draftText=$("detail").querySelector('[aria-label="Incident status draft"]')?.value;dialog.close();detailSnapshot="";renderDetail(draftText);}
           else if(!$("view-quality").hidden)await loadOutcomeEvaluations(qualityReviewState.before);else await openOutcomeReview(identifier,host);
-        } catch(e){error.textContent=e.message;}
+        } catch(e){if(isCurrent(form))error.textContent=e.message;}
         finally{busy(submit,false);}
       });
       host.replaceChildren(form);outcome.focus();
-    }catch(e){if(host.isConnected)host.replaceChildren(h("p",{class:"error",role:"alert"},e.message),h("button",{type:"button",class:"btn",onclick:()=>openOutcomeReview(identifier,host)},"Reload review"));}
+    }catch(e){if(isCurrent(loading))host.replaceChildren(h("p",{class:"error",role:"alert"},e.message),h("button",{type:"button",class:"btn",onclick:()=>openOutcomeReview(identifier,host)},"Reload review"));}
   }
   async function loadOutcomeEvaluations(before=null) {
     const host=$("outcome-evaluations"),sequence=++outcomeSequence;

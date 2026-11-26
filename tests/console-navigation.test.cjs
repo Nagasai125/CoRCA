@@ -96,6 +96,8 @@ test('each route selects its own page and records navigable history', () => {
   const views = JSON.parse(html.match(/const views = (\[[^\n]+\]);/)[1]);
   const pages = Object.fromEntries(views.map(view => ['view-' + view, {hidden: view !== 'overview'}]));
   Object.assign(pages, {'help-drawer':{open:false},'breadcrumb-group':{},'breadcrumb-page':{}});
+  let logHeadingFocusCount = 0;
+  pages['logs-title'] = {focus() { logHeadingFocusCount++; }};
   const links = views.map(view => ({dataset: {view}, attributes: {},
     setAttribute(key, value) { this.attributes[key] = value; },
     removeAttribute(key) { delete this.attributes[key]; }, closest() { return true; },
@@ -118,6 +120,7 @@ test('each route selects its own page and records navigable history', () => {
     assert.equal(links.find(link => link.dataset.view === view).attributes['aria-current'], 'page');
   }
   assert.deepEqual(urls, routes.map(view => '?view=' + view));
+  assert.equal(logHeadingFocusCount, 1);
   assert.equal(pages['breadcrumb-page'].textContent, 'About CoRCA');
   context.navigate('services', false); // popstate restores a route without adding history
   assert.equal(pages['view-services'].hidden, false);
@@ -386,12 +389,15 @@ test('log service highlights include the highest error count and preserve the ex
   assert.deepEqual(services.map(s=>s.name),order);
 });
 
-test('outcome reviews start unconfirmed and save independent labels without hidden causes', async () => {
-  function h(tag,props,...children) {
+function reviewNode(tag,props,...children) {
     return {tag,props:props || {},children:children.flat().filter(Boolean),events:{},isConnected:true,
+      get firstElementChild(){return this.children[0];},
       value:'',hidden:false,addEventListener(name,fn){this.events[name]=fn;},
       replaceChildren(...nodes){this.children=nodes;},append(...nodes){this.children.push(...nodes);},prepend(...nodes){this.children.unshift(...nodes);},focus(){}};
-  }
+}
+
+test('outcome reviews start unconfirmed and save independent labels without hidden causes', async () => {
+  const h=reviewNode;
   const host=h('div'),requests=[];
   let saved=null,reviewPage;
   const context=vm.createContext({h,encodeURIComponent,Promise,
@@ -423,6 +429,45 @@ test('outcome reviews start unconfirmed and save independent labels without hidd
   assert.equal(nodes.find(n=>n.props['aria-label']==='Confirmation evidence').value,'Verified postmortem record.');
 });
 
+
+for(const order of ['old first','new first','late old error']) {
+  test(`latest outcome selection owns the editor and save: ${order}`,async()=>{
+    const host=reviewNode('div'),pending={},posts=[],effects=[];
+    let finishSave;
+    const context=vm.createContext({h:reviewNode,fmtTime:String,busy(){},toast:()=>effects.push('toast'),
+      $:()=>({hidden:false}),qualityReviewState:{},loadOutcomeEvaluations:()=>effects.push('refresh'),
+      api(url,options){
+        if(options){posts.push([options.method,url]);return new Promise(resolve=>{finishSave=resolve;});}
+        if(!url.endsWith('/review'))return {method:'baro'};
+        return new Promise((resolve,reject)=>{pending[url.split('/')[3]]={resolve,reject};});
+      }});
+    vm.runInContext(handler('  async function openOutcomeReview(', '  async function loadOutcomeEvaluations('),context);
+    const old=context.openOutcomeReview('old',host),latest=context.openOutcomeReview('latest',host);
+    const loading=host.firstElementChild;
+    if(order==='old first'){
+      pending.old.resolve({review:null});await old;
+      assert.equal(host.firstElementChild,loading,'superseded result must not offer a save while latest is loading');
+    }
+    pending.latest.resolve({review:null});await latest;
+    const form=host.firstElementChild;
+    assert.equal(form.children.find(n=>n.tag==='h3').children[0],'Review diagnosis latest');
+    if(order!=='old first'){
+      if(order==='late old error')pending.old.reject(Error('old failed'));else pending.old.resolve({review:null});
+      await old;
+      assert.equal(host.firstElementChild,form);
+    }
+    const submit=()=>form.events.submit({preventDefault(){}});
+    const saving=submit();
+    const next=context.openOutcomeReview('next',host);
+    pending.next.resolve({review:null});await next;
+    const nextForm=host.firstElementChild;
+    finishSave();await saving;
+    await submit();
+    assert.equal(host.firstElementChild,nextForm);
+    assert.deepEqual(effects,[],'a superseded save must not notify or refresh');
+    assert.deepEqual(posts,[['POST','/v1/diagnoses/latest/review']]);
+  });
+}
 
 test('review queue pagination stays visible and detection metrics have a direct entry',async()=>{
   function h(tag,props={},...children){return {tag,props,children:children.flat().filter(c=>c!=null),events:{},isConnected:true,

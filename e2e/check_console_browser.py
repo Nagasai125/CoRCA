@@ -101,7 +101,14 @@ def main():
         expect(page.locator('#service-search')).to_have_value('database')
         expect(page.locator('#service-inventory tbody tr')).to_have_count(1)
 
-        page.locator('.sidebar [data-view=logs]').click()
+        page.locator('.sidebar [data-view=quality]').click()
+        page.locator('.help-launch').click()
+        expect(page.locator('#help-context')).to_contain_text('Context: Evaluations')
+        expect(page.locator('#help-question')).to_be_focused()
+        page.keyboard.press('Escape')
+        page.locator('.sidebar [data-view=overview]').click()
+        page.get_by_role('button', name='Analyze a log file').press('Enter')
+        expect(page.locator('#logs-title')).to_be_focused()
         page.set_input_files('#logs-file', {'name': 'browser-check.log', 'mimeType': 'text/plain', 'buffer': log})
         page.click('#logs-analyze')
         expect(page.locator('.log-bucket')).to_have_count(2)
@@ -118,10 +125,24 @@ def main():
             page.goto(base + '/app?view=services')
             expect(page.locator('#map-service')).to_be_enabled()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-        assert not errors, errors
         assert all('/v1/help/ask' in url or '/v1/logs/analyze?' in url for url in posts), posts
+        session = {'enabled': True, 'user': {'name': 'Browser tester', 'role': 'responder'}}
+        page.route('**/v1/access/session', lambda route: route.fulfill(json=session))
+
+        def logout(route):
+            assert route.request.method == 'POST'
+            session['user'] = None
+            route.fulfill(json={})
+
+        page.route('**/v1/access/logout', logout)
+        page.set_viewport_size({'width': 320, 'height': 800})
+        page.goto(base + '/app?view=overview')
+        expect(page.locator('#sign-out')).to_be_in_viewport()
+        page.get_by_role('button', name='Sign out').click()
+        expect(page.locator('#account-login')).to_be_visible()
+        assert not errors, errors
         browser.close()
-    print('PASS: four frontend regressions, evidence reopening, interactive timeline/map, mobile layouts; no JavaScript errors or configuration writes.')
+    print('PASS: console regressions including Evaluations help, Home to logs focus, and mobile sign out; no JavaScript errors or configuration writes.')
 
 
 if __name__ == '__main__':
