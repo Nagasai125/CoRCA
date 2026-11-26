@@ -56,8 +56,8 @@ docker compose down           # Stop the app and preserve workspace data.
 
 ## First investigation
 
-1. Open **Setup → Connect & verify**, choose a provider, and verify its connection.
-2. Open **Setup → Services**, discover services, select the scope, and save
+1. Open **Settings → Connect & verify**, choose a provider, and verify its connection.
+2. Open **Settings → Services & sensitivity**, discover services, select the scope, and save
    caller → dependency relationships. Confirm an empty graph for independent services.
 3. Set investigation sensitivity for BARO, or load compatible calibration.
 4. Choose **Start a diagnosis**, enter the incident start time, and review results.

@@ -740,7 +740,7 @@ def create_app(token=None, thresholds=None, timeout=20, concurrency=2, source=No
 
     def require_jobs(method):
         if jobs is None or source is None:
-            raise HTTPException(503, "Connect a telemetry source in Setup → Connect & verify first")
+            raise HTTPException(503, "Connect a telemetry source in Settings → Connect & verify first")
         if method not in thresholds:
             raise HTTPException(422, f"Configure sensitivity or load calibration for {method} on the Services page")
 

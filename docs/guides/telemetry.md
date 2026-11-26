@@ -6,7 +6,7 @@ instrumentation; you do not need to enter a business API key for every service.
 
 ## In the workspace
 
-1. Open **Setup → Connect & verify** and select a provider card. Enter its query endpoint,
+1. Open **Settings → Connect & verify** and select a provider card. Enter its query endpoint,
    or choose a region for Datadog/New Relic. Only that provider’s form is shown.
 2. Adapt the example queries to your actual metrics and service label/dimension.
    Every metric query must return one series per service.
@@ -20,7 +20,7 @@ instrumentation; you do not need to enter a business API key for every service.
    connection. Failed verification keeps the existing connection. Discovery lists services, per-metric
    observed coverage, and missing configured metrics. It does not install agents
    or infer call relationships from metric names.
-5. On **Setup → Services**, select the reporting services to analyze, define caller → callee
+5. On **Settings → Services & sensitivity**, select the reporting services to analyze, define caller → callee
    pairs, and save. For independent services, explicitly confirm an empty graph.
 6. Set investigation sensitivity to enable BARO with an explicitly manual threshold.
    Start with 6 and review findings against your dashboards. No new collection is
@@ -115,7 +115,7 @@ and [OpenTelemetry/Prometheus integration](https://opentelemetry.io/docs/compati
   an older database. Existing history is retained; the new SQLite column and
   settings table are added in place.
 - This is a shared workspace with direct access by default. Anyone who can reach
-  the deployment can change its settings. Enable named accounts under Team & access before sharing it. Administrators manage setup, responders investigate, and configuration changes have actor-attributed activity. SSO, MFA, and tenant isolation remain unavailable.
+  the deployment can change its settings. Enable named accounts under **Settings → Team & access** before sharing it. Administrators manage setup, responders investigate, and configuration changes have actor-attributed activity. SSO, MFA, and tenant isolation remain unavailable.
 - The diagnosis input limit is 199 metric columns plus time. Narrow service scope
   or queries for larger fleets. Discovery visibility is limited to what the
   configured queries and provider return; it is not a complete infrastructure
